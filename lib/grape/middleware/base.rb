@@ -1,28 +1,28 @@
 # frozen_string_literal: true
 
-require 'grape/dsl/headers'
-
 module Grape
   module Middleware
     class Base
-      include Helpers
-
-      attr_reader :app, :env, :options
-
-      TEXT_HTML = 'text/html'
-
       include Grape::DSL::Headers
 
-      # @param [Rack Application] app The standard argument for a Rack middleware.
-      # @param [Hash] options A hash of options, simply stored for use by subclasses.
-      def initialize(app, *options)
-        @app = app
-        @options = options.any? ? default_options.merge(options.shift) : default_options
-        @app_response = nil
-      end
+      attr_reader :app, :env, :options, :config
 
-      def default_options
-        {}
+      # @param [Rack Application] app The standard argument for a Rack middleware.
+      # @param [Hash] options Options forwarded to the subclass. When the
+      #   subclass declares an `Options` Data class, the kwargs are routed
+      #   through it and exposed via {#config}; {#options} keeps returning a
+      #   frozen Hash representation for back-compat with subclasses that read
+      #   `options[:key]`. Otherwise the kwargs are deep-merged with the
+      #   subclass's `DEFAULT_OPTIONS` Hash (legacy path) and frozen.
+      def initialize(app, **options)
+        @app = app
+        if (config_class = options_data_class)
+          @config = config_class.new(**options)
+          @options = @config.to_h.freeze
+        else
+          @options = merge_default_options(options).freeze
+        end
+        @app_response = nil
       end
 
       def call(env)
@@ -35,12 +35,7 @@ module Grape
         begin
           @app_response = @app.call(@env)
         ensure
-          begin
-            after_response = after
-          rescue StandardError => e
-            warn "caught error of type #{e.class} in after callback inside #{self.class.name} : #{e.message}"
-            raise e
-          end
+          after_response = reporting_after_errors { after }
         end
 
         response = after_response || @app_response
@@ -54,42 +49,76 @@ module Grape
 
       # @abstract
       # Called after the application is called in the middleware lifecycle.
-      # @return [Response, nil] a Rack SPEC response or nil to call the application afterwards.
+      # @return [Response, nil] a Rack SPEC response, or nil to keep the application's.
       def after; end
+
+      def rack_request
+        @rack_request ||= Rack::Request.new(env)
+      end
+
+      def context
+        env[Grape::Env::API_ENDPOINT]
+      end
 
       def response
         return @app_response if @app_response.is_a?(Rack::Response)
 
-        @app_response = Rack::Response.new(@app_response[2], @app_response[0], @app_response[1])
+        @app_response = Rack::Response[*@app_response]
       end
 
-      def content_type_for(format)
-        HashWithIndifferentAccess.new(content_types)[format]
-      end
-
-      def content_types
-        ContentTypes.content_types_for(options[:content_types])
-      end
-
-      def content_type
-        content_type_for(env[Grape::Env::API_FORMAT] || options[:format]) || TEXT_HTML
-      end
-
-      def mime_types
-        @mime_type ||= content_types.each_pair.with_object({}) do |(k, v), types_without_params|
-          types_without_params[v.split(';').first] = k
-        end
+      def query_params
+        rack_request.GET
+      rescue *Grape::RACK_ERRORS
+        raise Grape::Exceptions::RequestError
       end
 
       private
 
-      def merge_headers(response)
-        return unless headers.is_a?(Hash)
+      # Runs what the middleware does once the app has answered. An error it
+      # raises is reported before it goes on: a +rescue_from :all+ handler
+      # turns it into a 500 without logging it, so this may be the only trace
+      # of it.
+      def reporting_after_errors
+        yield
+      rescue StandardError => e
+        warn "caught error of type #{e.class} in after callback inside #{self.class.name} : #{e.message}"
+        raise e
+      end
 
-        case response
-        when Rack::Response then response.headers.merge!(headers)
-        when Array          then response[1].merge!(headers)
-        end
+      # +response+ is a Rack triplet, unless +after+ or the app handed back a
+      # Rack::Response.
+      def merge_headers(response)
+        return if @header.nil? || @header.empty?
+        return response.headers.merge!(@header) if response.is_a?(Rack::Response)
+
+        response[1].merge!(@header)
+      end
+
+      def merge_default_options(options)
+        return default_options.deep_merge(options) if respond_to?(:default_options)
+
+        default_options_constant&.deep_merge(options) || options
+      end
+
+      # self.class::Options honours middleware inheritance (e.g. Versioner::Path
+      # → Versioner::Base) and, unlike const_defined?, never resolves a
+      # top-level ::Options on Object. Absent an own/inherited Options class,
+      # the lookup raises NameError and we fall back to the legacy path.
+      def options_data_class
+        self.class::Options
+      rescue NameError
+        nil
+      end
+
+      # Same idea as {#options_data_class} for the legacy DEFAULT_OPTIONS Hash.
+      def default_options_constant
+        self.class::DEFAULT_OPTIONS
+      rescue NameError
+        nil
+      end
+
+      def try_scrub(obj)
+        Grape::Util::Scrub.scrub(obj)
       end
     end
   end

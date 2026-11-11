@@ -1,65 +1,69 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
+describe Grape::DSL::InsideRoute do
+  subject { dummy_class.new }
 
-module Grape
-  module DSL
-    module InsideRouteSpec
-      class Dummy
-        include Grape::DSL::InsideRoute
+  let(:dummy_class) do
+    Class.new do
+      include Grape::DSL::InsideRoute
+      include Grape::DSL::Settings
 
-        attr_reader :env, :request, :new_settings
+      attr_reader :env, :request
 
-        def initialize
-          @env = {}
-          @header = {}
-          @new_settings = { namespace_inheritable: {}, namespace_stackable: {} }
+      def initialize
+        @env = {}
+        @header = {}
+      end
+
+      def header(key = nil, val = nil)
+        if key
+          val ? header[key] = val : header.delete(key)
+        else
+          @header ||= Rack::Headers.new
         end
       end
     end
   end
-end
-
-describe Grape::Endpoint do
-  subject { Grape::DSL::InsideRouteSpec::Dummy.new }
 
   describe '#version' do
     it 'defaults to nil' do
-      expect(subject.version).to be nil
+      expect(subject.version).to be_nil
     end
 
     it 'returns env[api.version]' do
-      subject.env['api.version'] = 'dummy'
+      subject.env[Grape::Env::API_VERSION] = 'dummy'
       expect(subject.version).to eq 'dummy'
     end
   end
 
   describe '#error!' do
-    it 'throws :error' do
-      expect { subject.error! 'Not Found', 404 }.to throw_symbol(:error)
+    it 'raises a Grape::Exceptions::Halt carrying the response' do
+      expect { subject.error! 'Not Found', 404, 'X-Error' => 'detail' }.to raise_error(Grape::Exceptions::Halt) do |halt|
+        expect(halt.response).to have_attributes(status: 404, message: 'Not Found', headers: { 'X-Error' => 'detail' })
+      end
     end
 
-    describe 'thrown' do
-      before do
-        catch(:error) { subject.error! 'Not Found', 404 }
-      end
-      it 'sets status' do
-        expect(subject.status).to eq 404
-      end
+    # async hands a StandardError raised in a task back to the task waiting on
+    # it, and stops its reactor on any other exception.
+    it 'raises a StandardError' do
+      expect { subject.error! 'Not Found', 404 }.to raise_error(StandardError)
+    end
+
+    it 'sets status' do
+      expect { subject.error! 'Not Found', 404 }.to raise_error(Grape::Exceptions::Halt)
+      expect(subject.status).to eq 404
     end
 
     describe 'default_error_status' do
       before do
-        subject.namespace_inheritable(:default_error_status, 500)
-        catch(:error) { subject.error! 'Unknown' }
+        subject.inheritable_setting.default_error_status = 500
       end
+
       it 'sets status to default_error_status' do
+        expect { subject.error! 'Unknown' }.to raise_error(Grape::Exceptions::Halt)
         expect(subject.status).to eq 500
       end
     end
-
-    # self.status(status || settings[:default_error_status])
-    # throw :error, message: message, status: self.status, headers: headers
   end
 
   describe '#redirect' do
@@ -73,7 +77,7 @@ describe Grape::Endpoint do
       end
 
       it 'sets location header' do
-        expect(subject.header['Location']).to eq '/'
+        expect(subject.header['location']).to eq '/'
       end
     end
 
@@ -87,36 +91,38 @@ describe Grape::Endpoint do
       end
 
       it 'sets location header' do
-        expect(subject.header['Location']).to eq '/'
+        expect(subject.header['location']).to eq '/'
       end
     end
   end
 
   describe '#status' do
     %w[GET PUT OPTIONS].each do |method|
-      it 'defaults to 200 on GET' do
-        request = Grape::Request.new(Rack::MockRequest.env_for('/', method: method))
-        expect(subject).to receive(:request).and_return(request)
+      it "defaults to 200 on #{method}" do
+        subject.env[Rack::REQUEST_METHOD] = method
         expect(subject.status).to eq 200
       end
     end
 
     it 'defaults to 201 on POST' do
-      request = Grape::Request.new(Rack::MockRequest.env_for('/', method: 'POST'))
-      expect(subject).to receive(:request).and_return(request)
+      subject.env[Rack::REQUEST_METHOD] = Rack::POST
       expect(subject.status).to eq 201
     end
 
     it 'defaults to 204 on DELETE' do
-      request = Grape::Request.new(Rack::MockRequest.env_for('/', method: 'DELETE'))
-      expect(subject).to receive(:request).and_return(request)
+      subject.env[Rack::REQUEST_METHOD] = Rack::DELETE
       expect(subject.status).to eq 204
     end
 
     it 'defaults to 200 on DELETE with a body present' do
-      request = Grape::Request.new(Rack::MockRequest.env_for('/', method: 'DELETE'))
+      subject.env[Rack::REQUEST_METHOD] = Rack::DELETE
       subject.body 'content here'
-      expect(subject).to receive(:request).and_return(request)
+      expect(subject.status).to eq 200
+    end
+
+    it 'defaults to 200 on DELETE with a body holding bytes its encoding does not allow' do
+      subject.env[Rack::REQUEST_METHOD] = Rack::DELETE
+      subject.body "deleted caf\xC3"
       expect(subject.status).to eq 200
     end
 
@@ -132,16 +138,16 @@ describe Grape::Endpoint do
 
     it 'raises error if unknow symbol is passed' do
       expect { subject.status :foo_bar }
-        .to raise_error(ArgumentError, 'Status code :foo_bar is invalid.')
+        .to raise_error(ArgumentError, 'Unrecognized status code :foo_bar')
     end
 
     it 'accepts unknown Integer status codes' do
-      expect { subject.status 210 }.to_not raise_error
+      expect { subject.status 210 }.not_to raise_error
     end
 
     it 'raises error if status is not a integer or symbol' do
       expect { subject.status Object.new }
-        .to raise_error(ArgumentError, 'Status code must be Integer or Symbol.')
+        .to raise_error(ArgumentError, 'status code must be Integer or Symbol')
     end
   end
 
@@ -165,13 +171,7 @@ describe Grape::Endpoint do
     end
 
     it 'returns default' do
-      expect(subject.content_type).to be nil
-    end
-  end
-
-  describe '#cookies' do
-    it 'returns an instance of Cookies' do
-      expect(subject.cookies).to be_a Grape::Cookies
+      expect(subject.content_type).to be_nil
     end
   end
 
@@ -198,61 +198,7 @@ describe Grape::Endpoint do
     end
 
     it 'returns default' do
-      expect(subject.body).to be nil
-    end
-  end
-
-  describe '#file' do
-    before do
-      allow(subject).to receive(:warn)
-    end
-
-    describe 'set' do
-      context 'as file path' do
-        let(:file_path) { '/some/file/path' }
-
-        it 'emits a warning that this method is deprecated' do
-          expect(subject).to receive(:warn).with(/Use sendfile or stream/)
-
-          subject.file file_path
-        end
-
-        it 'forwards the call to sendfile' do
-          expect(subject).to receive(:sendfile).with(file_path)
-
-          subject.file file_path
-        end
-      end
-
-      context 'as object (backward compatibility)' do
-        let(:file_object) { double('StreamerObject', each: nil) }
-
-        it 'emits a warning that this method is deprecated' do
-          expect(subject).to receive(:warn).with(/Use stream to use a Stream object/)
-
-          subject.file file_object
-        end
-
-        it 'forwards the call to stream' do
-          expect(subject).to receive(:stream).with(file_object)
-
-          subject.file file_object
-        end
-      end
-    end
-
-    describe 'get' do
-      it 'emits a warning that this method is deprecated' do
-        expect(subject).to receive(:warn).with(/Use sendfile or stream/)
-
-        subject.file
-      end
-
-      it 'fowards call to sendfile' do
-        expect(subject).to receive(:sendfile)
-
-        subject.file
-      end
+      expect(subject.body).to be_nil
     end
   end
 
@@ -267,53 +213,36 @@ describe Grape::Endpoint do
         end
 
         before do
-          subject.header 'Cache-Control', 'cache'
-          subject.header 'Content-Length', 123
-          subject.header 'Transfer-Encoding', 'base64'
-        end
-
-        it 'sends no deprecation warnings' do
-          expect(subject).to_not receive(:warn)
-
+          subject.header Rack::CACHE_CONTROL, 'cache'
+          subject.header Rack::CONTENT_LENGTH, 123
+          subject.header Rack::TRANSFER_ENCODING, 'base64'
           subject.sendfile file_path
         end
 
         it 'returns value wrapped in StreamResponse' do
-          subject.sendfile file_path
-
           expect(subject.sendfile).to eq file_response
         end
 
-        it 'does not change the Cache-Control header' do
-          subject.sendfile file_path
-
-          expect(subject.header['Cache-Control']).to eq 'cache'
-        end
-
-        it 'does not change the Content-Length header' do
-          subject.sendfile file_path
-
-          expect(subject.header['Content-Length']).to eq 123
-        end
-
-        it 'does not change the Transfer-Encoding header' do
-          subject.sendfile file_path
-
-          expect(subject.header['Transfer-Encoding']).to eq 'base64'
+        it 'set the correct headers' do
+          expect(subject.header).to match(
+            Rack::CACHE_CONTROL => 'cache',
+            Rack::CONTENT_LENGTH => 123,
+            Rack::TRANSFER_ENCODING => 'base64'
+          )
         end
       end
 
       context 'as object' do
-        let(:file_object) { double('StreamerObject', each: nil) }
+        let(:file_object) { instance_double(Enumerator, each: nil) }
 
         it 'raises an error that only a file path is supported' do
-          expect { subject.sendfile file_object }.to raise_error(ArgumentError, /Argument must be a file path/)
+          expect { subject.sendfile file_object }.to raise_error(ArgumentError, /argument must be a file path/)
         end
       end
     end
 
     it 'returns default' do
-      expect(subject.sendfile).to be nil
+      expect(subject.sendfile).to be_nil
     end
   end
 
@@ -328,94 +257,46 @@ describe Grape::Endpoint do
         end
 
         before do
-          subject.header 'Cache-Control', 'cache'
-          subject.header 'Content-Length', 123
-          subject.header 'Transfer-Encoding', 'base64'
-        end
-
-        it 'emits no deprecation warnings' do
-          expect(subject).to_not receive(:warn)
-
+          subject.header Rack::CACHE_CONTROL, 'cache'
+          subject.header Rack::CONTENT_LENGTH, 123
+          subject.header Rack::TRANSFER_ENCODING, 'base64'
           subject.stream file_path
         end
 
         it 'returns file body wrapped in StreamResponse' do
-          subject.stream file_path
-
           expect(subject.stream).to eq file_response
         end
 
-        it 'sets Cache-Control header to no-cache' do
-          subject.stream file_path
-
-          expect(subject.header['Cache-Control']).to eq 'no-cache'
-        end
-
-        it 'does not change Cache-Control header' do
-          subject.stream
-
-          expect(subject.header['Cache-Control']).to eq 'cache'
-        end
-
-        it 'sets Content-Length header to nil' do
-          subject.stream file_path
-
-          expect(subject.header['Content-Length']).to eq nil
-        end
-
-        it 'sets Transfer-Encoding header to nil' do
-          subject.stream file_path
-
-          expect(subject.header['Transfer-Encoding']).to eq nil
+        it 'sets only the cache-control header' do
+          expect(subject.header).to match(Rack::CACHE_CONTROL => 'no-cache')
         end
       end
 
       context 'as a stream object' do
-        let(:stream_object) { double('StreamerObject', each: nil) }
+        let(:stream_object) { instance_double(Enumerator, each: nil) }
 
         let(:stream_response) do
           Grape::ServeStream::StreamResponse.new(stream_object)
         end
 
         before do
-          subject.header 'Cache-Control', 'cache'
-          subject.header 'Content-Length', 123
-          subject.header 'Transfer-Encoding', 'base64'
-        end
-
-        it 'emits no deprecation warnings' do
-          expect(subject).to_not receive(:warn)
-
+          subject.header Rack::CACHE_CONTROL, 'cache'
+          subject.header Rack::CONTENT_LENGTH, 123
+          subject.header Rack::TRANSFER_ENCODING, 'base64'
           subject.stream stream_object
         end
 
         it 'returns value wrapped in StreamResponse' do
-          subject.stream stream_object
-
           expect(subject.stream).to eq stream_response
         end
 
-        it 'sets Cache-Control header to no-cache' do
-          subject.stream stream_object
-
-          expect(subject.header['Cache-Control']).to eq 'no-cache'
-        end
-
-        it 'sets Content-Length header to nil' do
-          subject.stream stream_object
-
-          expect(subject.header['Content-Length']).to eq nil
-        end
-
-        it 'sets Transfer-Encoding header to nil' do
-          subject.stream stream_object
-
-          expect(subject.header['Transfer-Encoding']).to eq nil
+        it 'set only the cache-control header' do
+          expect(subject.header).to match(Rack::CACHE_CONTROL => 'no-cache')
         end
       end
 
       context 'as a non-stream object' do
-        let(:non_stream_object) { double('NonStreamerObject') }
+        let(:non_stream_object) { Object.new }
 
         it 'raises an error that the object must implement :each' do
           expect { subject.stream non_stream_object }.to raise_error(ArgumentError, /:each/)
@@ -424,15 +305,15 @@ describe Grape::Endpoint do
     end
 
     it 'returns default' do
-      expect(subject.stream).to be nil
-      expect(subject.header['Cache-Control']).to eq nil
+      expect(subject.stream).to be_nil
+      expect(subject.header).to be_empty
     end
   end
 
   describe '#route' do
     before do
-      subject.env['grape.routing_args'] = {}
-      subject.env['grape.routing_args'][:route_info] = 'dummy'
+      subject.env[Grape::Env::GRAPE_ROUTING_ARGS] = {}
+      subject.env[Grape::Env::GRAPE_ROUTING_ARGS][:route_info] = 'dummy'
     end
 
     it 'returns route_info' do
@@ -468,6 +349,26 @@ describe Grape::Endpoint do
 
           it 'presents dummy object' do
             expect(subject.body).to eq 'dummy'
+          end
+        end
+
+        # A versioned request hands the entity its version along with env.
+        describe 'on a versioned request' do
+          let(:echoing_entity) do
+            Class.new do
+              def self.represent(object, **options)
+                { object:, version: options[:version], env_given: options.key?(:env) }
+              end
+            end
+          end
+
+          before do
+            subject.env[Grape::Env::API_VERSION] = 'v1'
+            subject.present 'dummy', with: echoing_entity
+          end
+
+          it 'passes the version to the entity' do
+            expect(subject.body).to eq(object: 'dummy', version: 'v1', env_given: true)
           end
         end
       end
@@ -517,14 +418,24 @@ describe Grape::Endpoint do
           subject.present 'dummy1', with: entity_mock_one
           expect do
             subject.present 'dummy2', with: entity_mock_two
-          end.to raise_error ArgumentError, 'Representation of type String cannot be merged.'
+          end.to raise_error ArgumentError, 'representation of type `String` cannot be merged'
         end
       end
     end
   end
 
   describe '#declared' do
-    # see endpoint_spec.rb#declared for spec coverage
+    let(:dummy_class) do
+      Class.new do
+        include Grape::DSL::Declared
+
+        attr_reader :before_filter_passed
+
+        def initialize
+          @before_filter_passed = false
+        end
+      end
+    end
 
     it 'is not available by default' do
       expect { subject.declared({}) }.to raise_error(

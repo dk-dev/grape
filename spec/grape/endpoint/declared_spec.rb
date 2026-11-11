@@ -1,13 +1,9 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
-
 describe Grape::Endpoint do
   subject { Class.new(Grape::API) }
 
-  def app
-    subject
-  end
+  let(:app) { subject }
 
   describe '#declared' do
     before do
@@ -41,15 +37,17 @@ describe Grape::Endpoint do
         optional :empty_arr, type: Array
         optional :empty_typed_arr, type: Array[String]
         optional :empty_hash, type: Hash
+        optional :empty_hash_two, type: Hash
         optional :empty_set, type: Set
         optional :empty_typed_set, type: Set[String]
+        optional :empty_variant_set, type: Set[Integer, String]
       end
     end
 
     context 'when params are not built with default class' do
       it 'returns an object that corresponds with the params class - hash with indifferent access' do
         subject.params do
-          build_with Grape::Extensions::ActiveSupport::HashWithIndifferentAccess::ParamBuilder
+          build_with :hash_with_indifferent_access
         end
         subject.get '/declared' do
           d = declared(params, include_missing: true)
@@ -60,22 +58,9 @@ describe Grape::Endpoint do
         expect(JSON.parse(last_response.body)['declared_class']).to eq('ActiveSupport::HashWithIndifferentAccess')
       end
 
-      it 'returns an object that corresponds with the params class - hashie mash' do
-        subject.params do
-          build_with Grape::Extensions::Hashie::Mash::ParamBuilder
-        end
-        subject.get '/declared' do
-          d = declared(params, include_missing: true)
-          { declared_class: d.class.to_s }
-        end
-
-        get '/declared?first=present'
-        expect(JSON.parse(last_response.body)['declared_class']).to eq('Hashie::Mash')
-      end
-
       it 'returns an object that corresponds with the params class - hash' do
         subject.params do
-          build_with Grape::Extensions::Hash::ParamBuilder
+          build_with :hash
         end
         subject.get '/declared' do
           d = declared(params, include_missing: true)
@@ -87,23 +72,23 @@ describe Grape::Endpoint do
       end
     end
 
-    it 'should show nil for nested params if include_missing is true' do
+    it 'shows nil for nested params if include_missing is true' do
       subject.get '/declared' do
         declared(params, include_missing: true)
       end
 
       get '/declared?first=present'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['nested']['fourth']).to be_nil
     end
 
-    it 'should show nil for multiple allowed types if include_missing is true' do
+    it 'shows nil for multiple allowed types if include_missing is true' do
       subject.get '/declared' do
         declared(params, include_missing: true)
       end
 
       get '/declared?first=present'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['multiple_types']).to be_nil
     end
 
@@ -123,8 +108,8 @@ describe Grape::Endpoint do
         declared(params)
       end
       get '/declared?first=present'
-      expect(last_response.status).to eq(200)
-      expect(JSON.parse(last_response.body).keys.size).to eq(11)
+      expect(last_response).to be_successful
+      expect(JSON.parse(last_response.body).keys.size).to eq(13)
     end
 
     it 'has a optional param with default value all the time' do
@@ -132,7 +117,7 @@ describe Grape::Endpoint do
         declared(params)
       end
       get '/declared?first=one'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['third']).to eql('third-default')
     end
 
@@ -142,7 +127,7 @@ describe Grape::Endpoint do
       end
 
       get '/declared?first=present&nested[fourth]=1'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['nested'].keys.size).to eq 9
     end
 
@@ -154,7 +139,7 @@ describe Grape::Endpoint do
       subject.post('/declared') { declared(params) }
 
       post '/declared', first: 'present', second: ['present']
-      expect(last_response.status).to eq(201)
+      expect(last_response).to be_created
 
       body = JSON.parse(last_response.body)
       expect(body['second']).to eq(['present'])
@@ -176,7 +161,7 @@ describe Grape::Endpoint do
       end
 
       get '/declared?first=present&nested[][fourth]=1&nested[][fourth]=2'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['nested'].size).to eq 2
     end
 
@@ -187,7 +172,7 @@ describe Grape::Endpoint do
 
       it 'sets nested objects to be nil' do
         get '/declared?first=present'
-        expect(last_response.status).to eq(200)
+        expect(last_response).to be_successful
         expect(JSON.parse(last_response.body)['nested']).to be_nil
       end
     end
@@ -199,10 +184,11 @@ describe Grape::Endpoint do
 
       it 'sets objects with type=Hash to be a hash' do
         get '/declared?first=present'
-        expect(last_response.status).to eq(200)
+        expect(last_response).to be_successful
 
         body = JSON.parse(last_response.body)
         expect(body['empty_hash']).to eq({})
+        expect(body['empty_hash_two']).to eq({})
         expect(body['nested']).to be_a(Hash)
         expect(body['nested']['empty_hash']).to eq({})
         expect(body['nested']['nested_two']).to be_a(Hash)
@@ -210,18 +196,27 @@ describe Grape::Endpoint do
 
       it 'sets objects with type=Set to be a set' do
         get '/declared?first=present'
-        expect(last_response.status).to eq(200)
+        expect(last_response).to be_successful
+        json_empty_set = JSON.parse(Set.new.to_json)
 
         body = JSON.parse(last_response.body)
-        expect(['#<Set: {}>', []]).to include(body['empty_set'])
-        expect(['#<Set: {}>', []]).to include(body['empty_typed_set'])
-        expect(['#<Set: {}>', []]).to include(body['nested']['empty_set'])
-        expect(['#<Set: {}>', []]).to include(body['nested']['empty_typed_set'])
+        expect(body['empty_set']).to eq(json_empty_set)
+        expect(body['empty_typed_set']).to eq(json_empty_set)
+        expect(body['nested']['empty_set']).to eq(json_empty_set)
+        expect(body['nested']['empty_typed_set']).to eq(json_empty_set)
+      end
+
+      it 'sets objects with type=Set[Integer, String] (variant collection) to be a set' do
+        get '/declared?first=present'
+        expect(last_response).to be_successful
+
+        body = JSON.parse(last_response.body)
+        expect(body['empty_variant_set']).to eq(JSON.parse(Set.new.to_json))
       end
 
       it 'sets objects with type=Array to be an array' do
         get '/declared?first=present'
-        expect(last_response.status).to eq(200)
+        expect(last_response).to be_successful
 
         body = JSON.parse(last_response.body)
         expect(body['empty_arr']).to eq([])
@@ -234,7 +229,7 @@ describe Grape::Endpoint do
 
       it 'includes all declared children when type=Hash' do
         get '/declared?first=present'
-        expect(last_response.status).to eq(200)
+        expect(last_response).to be_successful
 
         body = JSON.parse(last_response.body)
         expect(body['nested'].keys).to eq(%w[fourth fifth nested_two nested_arr empty_arr empty_typed_arr empty_hash empty_set empty_typed_set])
@@ -248,8 +243,8 @@ describe Grape::Endpoint do
         declared(params)
       end
       get '/declared?first=one&other=two'
-      expect(last_response.status).to eq(200)
-      expect(JSON.parse(last_response.body).key?(:other)).to eq false
+      expect(last_response).to be_successful
+      expect(JSON.parse(last_response.body).key?(:other)).to be false
     end
 
     it 'stringifies if that option is passed' do
@@ -258,7 +253,7 @@ describe Grape::Endpoint do
       end
 
       get '/declared?first=one&other=two'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(JSON.parse(last_response.body)['first']).to eq 'one'
     end
 
@@ -269,7 +264,7 @@ describe Grape::Endpoint do
       end
 
       get '/declared?first=one&other=two'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
     end
 
     it 'does not include renamed missing attributes if that option is passed' do
@@ -282,7 +277,7 @@ describe Grape::Endpoint do
       end
 
       get '/declared?first=one&other=two'
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
     end
 
     it 'includes attributes with value that evaluates to false' do
@@ -296,8 +291,8 @@ describe Grape::Endpoint do
         ''
       end
 
-      post '/declared', ::Grape::Json.dump(first: 'one', boolean: false), 'CONTENT_TYPE' => 'application/json'
-      expect(last_response.status).to eq(201)
+      post '/declared', Grape::Json.dump(first: 'one', boolean: false), 'CONTENT_TYPE' => 'application/json'
+      expect(last_response).to be_created
     end
 
     it 'includes attributes with value that evaluates to nil' do
@@ -311,8 +306,8 @@ describe Grape::Endpoint do
         ''
       end
 
-      post '/declared', ::Grape::Json.dump(first: 'one', second: nil), 'CONTENT_TYPE' => 'application/json'
-      expect(last_response.status).to eq(201)
+      post '/declared', Grape::Json.dump(first: 'one', second: nil), 'CONTENT_TYPE' => 'application/json'
+      expect(last_response).to be_created
     end
 
     it 'includes missing attributes with defaults when there are nested hashes' do
@@ -339,7 +334,7 @@ describe Grape::Endpoint do
 
       get '/declared?first=present&nested[fourth]=&nested[nested_nested][sixth]=sixth'
       json = JSON.parse(last_response.body)
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(json['first']).to eq 'present'
       expect(json['nested'].keys).to eq %w[fourth fifth nested_nested]
       expect(json['nested']['fourth']).to eq ''
@@ -367,7 +362,7 @@ describe Grape::Endpoint do
 
       get '/declared?first=present&nested[fourth]=4'
       json = JSON.parse(last_response.body)
-      expect(last_response.status).to eq(200)
+      expect(last_response).to be_successful
       expect(json['first']).to eq 'present'
       expect(json['nested'].keys).to eq %w[fourth]
       expect(json['nested']['fourth']).to eq '4'
@@ -409,7 +404,7 @@ describe Grape::Endpoint do
 
     let(:parsed_response) { JSON.parse(last_response.body, symbolize_names: true) }
 
-    it { expect(last_response.status).to eq 200 }
+    it { expect(last_response).to be_successful }
 
     context 'with include_parent_namespaces: false' do
       it 'returns declared parameters only from current namespace' do
@@ -453,7 +448,7 @@ describe Grape::Endpoint do
         route_param :y do
           get do
             {
-              params: params,
+              params:,
               declared_params: declared(params)
             }
           end
@@ -483,7 +478,7 @@ describe Grape::Endpoint do
 
     it 'can access parent attributes' do
       get '/something/123/another/456/more/789'
-      expect(last_response.status).to eq 200
+      expect(last_response).to be_successful
       json = JSON.parse(last_response.body, symbolize_names: true)
 
       # test all three levels of params
@@ -506,7 +501,7 @@ describe Grape::Endpoint do
           namespace 'foo' do
             get do
               {
-                params: params,
+                params:,
                 declared_params: declared(params),
                 declared_params_no_parent: declared(params, include_parent_namespaces: false)
               }
@@ -518,11 +513,11 @@ describe Grape::Endpoint do
 
     it 'can access parent route_param' do
       get '/users/123/foo', bar: 'bar'
-      expect(last_response.status).to eq 200
+      expect(last_response).to be_successful
       json = JSON.parse(last_response.body, symbolize_names: true)
 
       expect(json[:declared_params][:id]).to eq 123
-      expect(json[:declared_params_no_parent][:id]).to eq nil
+      expect(json[:declared_params_no_parent][:id]).to be_nil
     end
   end
 
@@ -568,34 +563,34 @@ describe Grape::Endpoint do
       get '/artists/1'
       json = JSON.parse(last_response.body, symbolize_names: true)
 
-      expect(json.key?(:id)).to be_truthy
-      expect(json.key?(:artist_id)).not_to be_truthy
+      expect(json).to be_key(:id)
+      expect(json).not_to be_key(:artist_id)
     end
 
     it 'return only :artist_id without :id' do
       get '/artists/1/compositions'
       json = JSON.parse(last_response.body, symbolize_names: true)
 
-      expect(json.key?(:artist_id)).to be_truthy
-      expect(json.key?(:id)).not_to be_truthy
+      expect(json).to be_key(:artist_id)
+      expect(json).not_to be_key(:id)
     end
 
     it 'return :filter and :id parameters in declared for second enpoint inside route_param' do
       get '/artists/1/some_route', filter: 'some_filter'
       json = JSON.parse(last_response.body, symbolize_names: true)
 
-      expect(json.key?(:filter)).to be_truthy
-      expect(json.key?(:id)).to be_truthy
-      expect(json.key?(:artist_id)).not_to be_truthy
+      expect(json).to be_key(:filter)
+      expect(json).to be_key(:id)
+      expect(json).not_to be_key(:artist_id)
     end
 
     it 'return :compositor_id for mounter in route_param' do
       get '/artists/1/albums'
       json = JSON.parse(last_response.body, symbolize_names: true)
 
-      expect(json.key?(:compositor_id)).to be_truthy
-      expect(json.key?(:id)).not_to be_truthy
-      expect(json.key?(:artist_id)).not_to be_truthy
+      expect(json).to be_key(:compositor_id)
+      expect(json).not_to be_key(:id)
+      expect(json).not_to be_key(:artist_id)
     end
   end
 
@@ -700,7 +695,7 @@ describe Grape::Endpoint do
           before = params.to_h
           declared(params, include_missing: false)
           after = params.to_h
-          { before: before, after: after }
+          { before:, after: }
         end
       end
 
@@ -843,6 +838,119 @@ describe Grape::Endpoint do
         post '/test', user_attributes: { email: 'test@example.com' }
         expect(JSON.parse(last_response.body)).to match({})
       end
+    end
+
+    context 'with a renamed field inside `given` block nested in hashes' do
+      before do
+        subject.format :json
+        subject.params do
+          requires :a, type: Hash do
+            optional :c, type: String
+            given :c do
+              requires :b, type: Hash do
+                requires :input_field, as: :output_field
+              end
+            end
+          end
+        end
+        subject.post '/test' do
+          declared(params)
+        end
+      end
+
+      it 'renames parameter input_field to output_field' do
+        post '/test', { a: { b: { input_field: 'value' }, c: 'value2' } }
+
+        expect(JSON.parse(last_response.body)).to \
+          match('a' => { 'b' => { 'output_field' => 'value' }, 'c' => 'value2' })
+      end
+    end
+  end
+
+  describe 'optional_array' do
+    subject { last_response }
+
+    let(:app) do
+      Class.new(Grape::API) do
+        params do
+          requires :z, type: Array do
+            optional :a, type: Integer
+          end
+        end
+
+        post do
+          declared(params, include_missing: false)
+        end
+      end
+    end
+
+    before { post '/', { z: [] } }
+
+    it { is_expected.to be_successful }
+  end
+
+  describe 'Array elements that are not a Hash' do
+    let(:app) do
+      Class.new(Grape::API) do
+        format :json
+
+        params do
+          optional :items, type: Array do
+            requires :id, type: Integer
+            optional :name, type: String
+          end
+        end
+        post('/items') { declared(params) }
+
+        params do
+          requires :tags, type: Array do
+            optional :label, type: String
+          end
+        end
+        post('/tags') { declared(params, include_missing: false) }
+      end
+    end
+
+    it 'returns the elements of an optional Array that are all blank as they came in' do
+      post_with_json '/items', items: [nil, '']
+      expect(last_response.status).to eq(201)
+      expect(JSON.parse(last_response.body)).to eq('items' => [nil, ''])
+    end
+
+    it 'returns the elements of an Array of optional params that are all blank as they came in' do
+      post_with_json '/tags', tags: [' ', false]
+      expect(last_response.status).to eq(201)
+      expect(JSON.parse(last_response.body)).to eq('tags' => [' ', false])
+    end
+
+    it 'never sees a blank element sent with others' do
+      post_with_json '/items', items: [nil, { id: 1, junk: 2 }, '']
+      expect(last_response.status).to eq(400)
+    end
+  end
+
+  describe 'a value that is not a Hash where nested params are declared' do
+    let(:app) do
+      Class.new(Grape::API) do
+        format :json
+
+        params do
+          optional :shipping, type: Grape::API::Boolean
+          given :shipping do
+            optional :address, type: Hash do
+              optional :city, type: String
+            end
+          end
+        end
+        post('/') { declared(params) }
+      end
+    end
+
+    # The given's dependency is not met, so nothing validates address.
+    it 'returns it as it came in' do
+      post_with_json '/', address: 'somewhere'
+      expect(last_response.status).to eq(201)
+      expect(JSON.parse(last_response.body)).to eq('shipping' => nil, 'address' => 'somewhere')
     end
   end
 end

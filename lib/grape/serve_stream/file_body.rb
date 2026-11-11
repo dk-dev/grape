@@ -31,6 +31,13 @@ module Grape
       def ==(other)
         path == other.path
       end
+      alias eql? ==
+
+      # Mirrors #==, which keys on the path alone and does not check the
+      # class, so the class must stay out of the hash too.
+      def hash
+        path.hash
+      end
     end
   end
 end

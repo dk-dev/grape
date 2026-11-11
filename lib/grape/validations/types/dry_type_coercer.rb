@@ -1,75 +1,68 @@
 # frozen_string_literal: true
 
-require 'dry-types'
-
-module DryTypes
-  # Call +Dry.Types()+ to add all registered types to +DryTypes+ which is
-  # a container in this case. Check documentation for more information
-  # https://dry-rb.org/gems/dry-types/1.2/getting-started/
-  include Dry.Types()
-end
-
 module Grape
   module Validations
     module Types
       # A base class for classes which must identify a coercer to be used.
       # If the +strict+ argument is true, it won't coerce the given value
       # but check its type. More information there
-      # https://dry-rb.org/gems/dry-types/1.2/built-in-types/
+      # https://dry-rb.org/gems/dry-types/main/built-in-types/
       class DryTypeCoercer
-        class << self
-          # Registers a collection coercer which could be found by a type,
-          # see +collection_coercer_for+ method below. This method is meant for inheritors.
-          def register_collection(type)
-            DryTypeCoercer.collection_coercers[type] = self
-          end
+        extend Grape::Util::FreezeOnNew
 
+        class << self
           # Returns a collection coercer which corresponds to a given type.
           # Example:
           #
-          #    collection_coercer_for(Array)
+          #    collection_coercer_for([Integer])
           #    #=> Grape::Validations::Types::ArrayCoercer
           def collection_coercer_for(type)
-            collection_coercers[type]
+            return ArrayCoercer if type.is_a?(Array)
+            return SetCoercer if type.is_a?(Set)
+
+            raise ArgumentError, "unknown type: `#{type}`"
           end
 
           # Returns an instance of a coercer for a given type
-          def coercer_instance_for(type, strict = false)
-            return PrimitiveCoercer.new(type, strict) if type.instance_of?(Class)
-
-            # in case of a collection (Array[Integer]) the type is an instance of a collection,
-            # so we need to figure out the actual type
-            collection_coercer_for(type.class).new(type, strict)
-          end
-
-          protected
-
-          def collection_coercers
-            @collection_coercers ||= {}
+          def coercer_instance_for(type, strict: false)
+            klass = type.instance_of?(Class) ? PrimitiveCoercer : collection_coercer_for(type)
+            klass.new(type, strict:)
           end
         end
 
-        def initialize(type, strict = false)
+        def initialize(type, strict: false)
           @type = type
           @strict = strict
-          @scope = strict ? DryTypes::Strict : DryTypes::Params
+          @cache_coercer = strict ? DryTypes::StrictCache : DryTypes::ParamsCache
         end
 
         # Coerces the given value to a type which was specified during
         # initialization as a type argument.
         #
+        # Given a block, dry-types reports a value it cannot coerce by calling
+        # the block instead of raising. Raising is what cost: its CoercionError
+        # is re-raised with the backtrace of the error underneath, and building
+        # that backtrace as strings at request depth took about 25 µs for every
+        # rejected value -- every `types: [Integer, String]` param given a
+        # string, every 400 for a mistyped value.
+        #
+        # Every coercion dry-types runs takes that block, so none of them
+        # raises a CoercionError here. Anything that raises something else --
+        # +Kernel#String+, which +Coercible::String+ is built from, ignores the
+        # block and raises TypeError -- is answered by
+        # +CoerceValidator#coerce_value+, which rescues StandardError with the
+        # same InvalidValue.
+        #
         # @param val [Object]
         def call(val)
           return if val.nil?
 
-          @coercer[val]
-        rescue Dry::Types::CoercionError => _e
-          InvalidValue.new
+          @coercer.call(val) { InvalidValue.new }
         end
 
         protected
 
-        attr_reader :scope, :type, :strict
+        attr_reader :type, :strict, :cache_coercer
       end
     end
   end

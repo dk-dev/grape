@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-$LOAD_PATH.unshift File.expand_path('lib', __dir__)
-require 'grape/version'
+require_relative 'lib/grape/version'
 
 Gem::Specification.new do |s|
   s.name        = 'grape'
@@ -17,20 +16,18 @@ Gem::Specification.new do |s|
     'bug_tracker_uri' => 'https://github.com/ruby-grape/grape/issues',
     'changelog_uri' => "https://github.com/ruby-grape/grape/blob/v#{s.version}/CHANGELOG.md",
     'documentation_uri' => "https://www.rubydoc.info/gems/grape/#{s.version}",
-    'source_code_uri' => "https://github.com/ruby-grape/grape/tree/v#{s.version}"
+    'source_code_uri' => "https://github.com/ruby-grape/grape/tree/v#{s.version}",
+    'rubygems_mfa_required' => 'true'
   }
 
-  s.add_runtime_dependency 'activesupport'
-  s.add_runtime_dependency 'builder'
-  s.add_runtime_dependency 'dry-types', '>= 1.1'
-  s.add_runtime_dependency 'mustermann-grape', '~> 1.0.0'
-  s.add_runtime_dependency 'rack', '>= 1.3.0'
-  s.add_runtime_dependency 'rack-accept'
+  s.add_dependency 'activesupport', '>= 8.0'
+  s.add_dependency 'dry-configurable', '>= 1.0'
+  s.add_dependency 'dry-types', '>= 1.1'
+  s.add_dependency 'mustermann', '>= 4.0'
+  s.add_dependency 'rack', '>= 3.1'
+  s.add_dependency 'zeitwerk', '>= 2.6'
 
-  s.files         = %w[CHANGELOG.md CONTRIBUTING.md README.md grape.png UPGRADING.md LICENSE]
-  s.files        += %w[grape.gemspec]
-  s.files        += Dir['lib/**/*']
-  s.test_files    = Dir['spec/**/*']
+  s.files = Dir['lib/**/*', 'CHANGELOG.md', 'CONTRIBUTING.md', 'README.md', 'grape.png', 'UPGRADING.md', 'LICENSE', 'grape.gemspec']
   s.require_paths = ['lib']
-  s.required_ruby_version = '>= 2.5.0'
+  s.required_ruby_version = '>= 3.3.1'
 end

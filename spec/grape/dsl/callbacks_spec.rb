@@ -1,46 +1,49 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
+describe Grape::DSL::Callbacks do
+  subject { dummy_class }
 
-module Grape
-  module DSL
-    module CallbacksSpec
-      class Dummy
-        include Grape::DSL::Callbacks
-      end
+  let(:dummy_class) do
+    Class.new do
+      extend Grape::DSL::Settings
+      extend Grape::DSL::Callbacks
     end
+  end
 
-    describe Callbacks do
-      subject { Class.new(CallbacksSpec::Dummy) }
-      let(:proc) { -> {} }
+  let(:proc) { -> {} }
 
-      describe '.before' do
-        it 'adds a block to "before"' do
-          expect(subject).to receive(:namespace_stackable).with(:befores, proc)
-          subject.before(&proc)
-        end
-      end
+  describe '.before' do
+    it 'adds a block to "before"' do
+      subject.before(&proc)
+      expect(subject.inheritable_setting.callbacks[:before]).to eq([proc])
+    end
+  end
 
-      describe '.before_validation' do
-        it 'adds a block to "before_validation"' do
-          expect(subject).to receive(:namespace_stackable).with(:before_validations, proc)
-          subject.before_validation(&proc)
-        end
-      end
+  describe '.before_validation' do
+    it 'adds a block to "before_validation"' do
+      subject.before_validation(&proc)
+      expect(subject.inheritable_setting.callbacks[:before_validation]).to eq([proc])
+    end
+  end
 
-      describe '.after_validation' do
-        it 'adds a block to "after_validation"' do
-          expect(subject).to receive(:namespace_stackable).with(:after_validations, proc)
-          subject.after_validation(&proc)
-        end
-      end
+  describe '.after_validation' do
+    it 'adds a block to "after_validation"' do
+      subject.after_validation(&proc)
+      expect(subject.inheritable_setting.callbacks[:after_validation]).to eq([proc])
+    end
+  end
 
-      describe '.after' do
-        it 'adds a block to "after"' do
-          expect(subject).to receive(:namespace_stackable).with(:afters, proc)
-          subject.after(&proc)
-        end
-      end
+  describe '.after' do
+    it 'adds a block to "after"' do
+      subject.after(&proc)
+      expect(subject.inheritable_setting.callbacks[:after]).to eq([proc])
+    end
+  end
+
+  describe '.finally' do
+    it 'adds a block to "finally"' do
+      subject.finally(&proc)
+      expect(subject.inheritable_setting.callbacks[:finally]).to eq([proc])
     end
   end
 end

@@ -1,15 +1,761 @@
-### 1.6.1 (Next)
+### 4.2.0 (Next)
 
 #### Features
 
-* [#2196](https://github.com/ruby-grape/grape/pull/2196): Add support for `passwords_hashed` param for `digest_auth` - [@lHydra](https://github.com/lhydra).
+* [#3019](https://github.com/ruby-grape/grape/pull/3019): Add `API.eager_load!` to compile an API and load its I18n translations at boot - [@ericproulx](https://github.com/ericproulx).
+* [#3022](https://github.com/ruby-grape/grape/pull/3022): Compile the APIs mounted in a Rails application's routes at boot when it eager loads - [@ericproulx](https://github.com/ericproulx).
+* [#3052](https://github.com/ruby-grape/grape/pull/3052): Add `Grape::ErrorFormatter::ProblemJson` to answer errors as RFC 9457 problem details - [@ericproulx](https://github.com/ericproulx).
+* [#3054](https://github.com/ruby-grape/grape/pull/3054): Add `Grape.config.allow_undeclared_params`, answering 400 to undeclared params when `false`, the Grape 5.0 default - [@ericproulx](https://github.com/ericproulx).
+* [#3056](https://github.com/ruby-grape/grape/pull/3056): Drop support for Rails 7.2 and require ActiveSupport 8.0 - [@ericproulx](https://github.com/ericproulx).
+* [#3062](https://github.com/ruby-grape/grape/pull/3062): Use the reusable Danger workflow with a separate Gemfile - [@dblock](https://github.com/dblock).
+* [#3063](https://github.com/ruby-grape/grape/pull/3063): Drop support for Rack 2.2 and 3.0 and require Rack 3.1 - [@ericproulx](https://github.com/ericproulx).
 * Your contribution here.
 
 #### Fixes
 
+* [#2981](https://github.com/ruby-grape/grape/pull/2981): Speed up group validators inside large Array scopes by only inspecting declared attrs - [@braktar](https://github.com/braktar).
+* [#3043](https://github.com/ruby-grape/grape/pull/3043): Answer 404 when every route on a path cascades, however many there are - [@ericproulx](https://github.com/ericproulx).
+* [#3045](https://github.com/ruby-grape/grape/pull/3045): Pin `git` below 6 so Danger can load - [@ericproulx](https://github.com/ericproulx).
+* [#3046](https://github.com/ruby-grape/grape/pull/3046): Fix file uploads rejected inside `oneof` variants - [@ericproulx](https://github.com/ericproulx).
+* [#3047](https://github.com/ruby-grape/grape/pull/3047): Split the router's miss and cascade paths and name its methods for what they do - [@ericproulx](https://github.com/ericproulx).
+* [#3048](https://github.com/ruby-grape/grape/pull/3048): Update rubocop to 1.92.2 and tighten Metrics and line length limits - [@ericproulx](https://github.com/ericproulx).
+* [#3049](https://github.com/ruby-grape/grape/pull/3049): Clear the RuboCop todo and remove `.rubocop_todo.yml` - [@ericproulx](https://github.com/ericproulx).
+* [#3050](https://github.com/ruby-grape/grape/pull/3050): Remove the unused `ParamsScope#root?` and cover the placeholder skip in `validate_elements!` - [@ericproulx](https://github.com/ericproulx).
+* [#3051](https://github.com/ruby-grape/grape/pull/3051): Look up the validation error format once per response instead of once per message - [@ericproulx](https://github.com/ericproulx).
+* [#3055](https://github.com/ruby-grape/grape/pull/3055): Stop a 405 behind `Rack::Cascade` from making the next app answer 405 too - [@ericproulx](https://github.com/ericproulx).
+* [#3058](https://github.com/ruby-grape/grape/pull/3058): Declare `rexml` in the test bundle instead of relying on Danger to bring it in - [@ericproulx](https://github.com/ericproulx).
+* [#3060](https://github.com/ruby-grape/grape/pull/3060): Raise `ArgumentError` on a `version` that is not a String, Symbol or Integer, such as a positional options Hash - [@ericproulx](https://github.com/ericproulx).
+* [#3061](https://github.com/ruby-grape/grape/pull/3061): Make a helper reach the routes declared above it in its scope - [@ericproulx](https://github.com/ericproulx).
+* [#3064](https://github.com/ruby-grape/grape/pull/3064): Cascade past a mounted Rack app that declines with a lowercase `x-cascade` - [@ericproulx](https://github.com/ericproulx).
+* [#3065](https://github.com/ruby-grape/grape/pull/3065): Answer a route opening with an optional segment without it under a namespace, prefix or mount path - [@ericproulx](https://github.com/ericproulx).
+* [#3066](https://github.com/ruby-grape/grape/pull/3066): Honour `given` and empty optional Hash scopes in group validators - [@braktar](https://github.com/braktar).
+* [#3067](https://github.com/ruby-grape/grape/pull/3067): Stop a `given` in an Array from passing over elements sent empty - [@ericproulx](https://github.com/ericproulx).
+* [#3068](https://github.com/ruby-grape/grape/pull/3068): Name the element a request sent in errors from a scope under a `given` in an Array - [@ericproulx](https://github.com/ericproulx).
+* [#3069](https://github.com/ruby-grape/grape/pull/3069): Find params declared with String names under `build_with :hash` - [@ericproulx](https://github.com/ericproulx).
+* [#3070](https://github.com/ruby-grape/grape/pull/3070): Speed up auto-`OPTIONS`, 405 and 404 answers on APIs with many paths - [@ericproulx](https://github.com/ericproulx).
+* [#3071](https://github.com/ruby-grape/grape/pull/3071): Skip the query parse when building the params of a request with no query string - [@ericproulx](https://github.com/ericproulx).
+* [#3072](https://github.com/ruby-grape/grape/pull/3072): Answer the `Accept` lists axios, jQuery and HTTPie send without negotiating them on every request - [@ericproulx](https://github.com/ericproulx).
+* [#3073](https://github.com/ruby-grape/grape/pull/3073): Let a `rescue_from :all` in a namespace or mounted API outrank the enclosing scope's handlers - [@ericproulx](https://github.com/ericproulx).
+* [#3075](https://github.com/ruby-grape/grape/pull/3075): Validate the params of an optional Hash scope without the attributes iterator - [@ericproulx](https://github.com/ericproulx).
+* [#3076](https://github.com/ruby-grape/grape/pull/3076): Skip the query merge when building the params of a body sent without a query string - [@ericproulx](https://github.com/ericproulx).
+* Your contribution here.
+
+### 4.1.0 (2026-10-31)
+
+#### Features
+
+* [#2914](https://github.com/ruby-grape/grape/pull/2914): Bench 4.0.0 in the version throughput benchmark - [@ericproulx](https://github.com/ericproulx).
+* [#2913](https://github.com/ruby-grape/grape/pull/2913): Bench ZJIT alongside YJIT in the version benchmark - [@ericproulx](https://github.com/ericproulx).
+* [#2941](https://github.com/ruby-grape/grape/pull/2941): Bench static, parameterized and many-route shapes in separate tables in the version throughput benchmark - [@ericproulx](https://github.com/ericproulx).
+* [#2951](https://github.com/ruby-grape/grape/pull/2951): Re-bench only `master` in the version throughput benchmark and carry released versions' results over - [@ericproulx](https://github.com/ericproulx).
+* [#2960](https://github.com/ruby-grape/grape/pull/2960): Lint every response of an API once under `lint!`, including the router's 404 and mounted Rack apps, instead of inside each endpoint's stack - [@ericproulx](https://github.com/ericproulx).
+* [#2966](https://github.com/ruby-grape/grape/pull/2966): Require Ruby 3.3.1, the first 3.3 release that parses anonymous argument forwarding from inside a block - [@ericproulx](https://github.com/ericproulx).
+* [#3008](https://github.com/ruby-grape/grape/pull/3008): Add the grape-on-rack app as a live-server memory profiling harness - [@ericproulx](https://github.com/ericproulx).
+* [#3025](https://github.com/ruby-grape/grape/pull/3025): Add `:md` and `:markdown` formatters that render an object's `to_markdown`, for APIs that declare a `text/markdown` content type - [@ericproulx](https://github.com/ericproulx).
+* [#3029](https://github.com/ruby-grape/grape/pull/3029): Add a built-in `:jsonl` (JSON Lines) format that streams an Enumerator body - [@ericproulx](https://github.com/ericproulx).
+* [#3040](https://github.com/ruby-grape/grape/pull/3040): Add the `raise_rescue_handler_errors` setting to let an exception raised inside a `rescue_from` block propagate - [@dduugg](https://github.com/dduugg).
+
+#### Fixes
+
+* [#2916](https://github.com/ruby-grape/grape/pull/2916): Pin `json` below 3 in the gemfiles whose dependencies cannot use it - [@ericproulx](https://github.com/ericproulx).
+* [#2915](https://github.com/ruby-grape/grape/pull/2915): Update rubocop to 1.90.0 and rubocop-performance to 1.27.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2918](https://github.com/ruby-grape/grape/pull/2918): Skip the dry-types round trip when a value already is the declared type - [@ericproulx](https://github.com/ericproulx).
+* [#2917](https://github.com/ruby-grape/grape/pull/2917): Read path captures out of the router's union match instead of re-running the route's pattern - [@ericproulx](https://github.com/ericproulx).
+* [#2921](https://github.com/ruby-grape/grape/pull/2921): Pin the router's request-time isolation regressions through requests instead of its instance variables - [@ericproulx](https://github.com/ericproulx).
+* [#2935](https://github.com/ruby-grape/grape/pull/2935): Return the elements of an Array params scope that are not a Hash from `declared` instead of raising - [@ericproulx](https://github.com/ericproulx).
+* [#2937](https://github.com/ruby-grape/grape/pull/2937): Forward the class methods kept off an API class to its base instance explicitly, and pin what `delegate_missing_to` still answers - [@ericproulx](https://github.com/ericproulx).
+* [#2936](https://github.com/ruby-grape/grape/pull/2936): Speed up header versioning, content negotiation, params validation and error responses on the request path - [@ericproulx](https://github.com/ericproulx).
+* [#2938](https://github.com/ruby-grape/grape/pull/2938): Correct code comments that no longer match the code - [@ericproulx](https://github.com/ericproulx).
+* [#2939](https://github.com/ruby-grape/grape/pull/2939): Speed up error responses, param defaults and deciding whether to read a request body - [@ericproulx](https://github.com/ericproulx).
+* [#2940](https://github.com/ruby-grape/grape/pull/2940): Speed up matching fully static routes - [@ericproulx](https://github.com/ericproulx).
+* [#2942](https://github.com/ruby-grape/grape/pull/2942): Route a path carrying raw non-ASCII bytes on an API with a non-ASCII route instead of raising `Encoding::CompatibilityError` - [@ericproulx](https://github.com/ericproulx).
+* [#2920](https://github.com/ruby-grape/grape/pull/2920): Look for a 405 neighbour only on paths the request's method has no route on - [@ericproulx](https://github.com/ericproulx).
+* [#2943](https://github.com/ruby-grape/grape/pull/2943): Speed up matching among many parameterized routes - [@ericproulx](https://github.com/ericproulx).
+* [#2948](https://github.com/ruby-grape/grape/pull/2948): Speed up path-versioned requests and error responses - [@ericproulx](https://github.com/ericproulx).
+* [#2949](https://github.com/ruby-grape/grape/pull/2949): Present an error response with the entity a `desc` `failure:` keyword names - [@ericproulx](https://github.com/ericproulx).
+* [#2947](https://github.com/ruby-grape/grape/pull/2947): Speed up `declared` filling in a missing Hash param - [@ericproulx](https://github.com/ericproulx).
+* [#2950](https://github.com/ruby-grape/grape/pull/2950): Read a configuration key nested in a Hash or an Array in a remountable API instead of raising `NoMethodError` - [@ericproulx](https://github.com/ericproulx).
+* [#2952](https://github.com/ruby-grape/grape/pull/2952): Route a path running on from the segment ahead of a trailing `*path` the same way on an API with many routes as on one with few - [@ericproulx](https://github.com/ericproulx).
+* [#2954](https://github.com/ruby-grape/grape/pull/2954): Answer a `DELETE` whose body holds bytes invalid in its encoding with `200` instead of raising `ArgumentError` - [@ericproulx](https://github.com/ericproulx).
+* [#2956](https://github.com/ruby-grape/grape/pull/2956): Keep every mount of an API mounted more than once when a later declaration refreshes the mounts - [@ericproulx](https://github.com/ericproulx).
+* [#2958](https://github.com/ruby-grape/grape/pull/2958): Answer a `HEAD` request for a path no route matches without a body - [@ericproulx](https://github.com/ericproulx).
+* [#2953](https://github.com/ruby-grape/grape/pull/2953): Answer an `error!` String message with its own status instead of a `500` when the route names a `failure` entity for that status - [@ericproulx](https://github.com/ericproulx).
+* [#2955](https://github.com/ruby-grape/grape/pull/2955): Reject a value that is not an Array, and a member of none of the types, in a collection with multiple member types instead of passing them on as `nil` and `InvalidValue` - [@ericproulx](https://github.com/ericproulx).
+* [#2957](https://github.com/ruby-grape/grape/pull/2957): Reject an element that is not a Hash in an Array param given a block, and stop `declared` raising on a value that is not a Hash where nested params are declared - [@ericproulx](https://github.com/ericproulx).
+* [#2959](https://github.com/ruby-grape/grape/pull/2959): Send a content type for an `api_format` the API does not declare instead of a `nil` header - [@ericproulx](https://github.com/ericproulx).
+* [#2961](https://github.com/ruby-grape/grape/pull/2961): Correct the README on where `using: :param` reads the version from and on the status of an unsupported request content type - [@ericproulx](https://github.com/ericproulx).
+* [#2963](https://github.com/ruby-grape/grape/pull/2963): Stop reading a setting on an API class, such as `MyAPI.version`, from discarding the compiled API and re-mounting everything mounted in it - [@ericproulx](https://github.com/ericproulx).
+* [#2964](https://github.com/ruby-grape/grape/pull/2964): Stop keeping every instance a mounted API was re-mounted with each time a later declaration refreshed the mounts - [@ericproulx](https://github.com/ericproulx).
+* [#2965](https://github.com/ruby-grape/grape/pull/2965): Correct two README examples whose shown response did not match their request - [@ericproulx](https://github.com/ericproulx).
+* [#2967](https://github.com/ruby-grape/grape/pull/2967): Hand a Proc passed as the last argument to `use`, `insert_before` or `insert_after` to the middleware instead of taking it for its block - [@ericproulx](https://github.com/ericproulx).
+* [#2968](https://github.com/ruby-grape/grape/pull/2968): Label a `redirect` body the caller supplies with the API format it is rendered in instead of `text/plain` - [@ericproulx](https://github.com/ericproulx).
+* [#2972](https://github.com/ruby-grape/grape/pull/2972): Stop the request path resolving params it was not asked for - [@ericproulx](https://github.com/ericproulx).
+* [#2973](https://github.com/ruby-grape/grape/pull/2973): Stop allocating two match caches per route that Mustermann is never asked to use - [@ericproulx](https://github.com/ericproulx).
+* [#2977](https://github.com/ruby-grape/grape/pull/2977): Stop copying the query params of a request whose params builder builds a new object - [@ericproulx](https://github.com/ericproulx).
+* [#2974](https://github.com/ruby-grape/grape/pull/2974): Run every endpoint's Rack stack through one shared lambda instead of one allocated per endpoint, and make `Grape::Endpoint#run` public - [@ericproulx](https://github.com/ericproulx).
+* [#2975](https://github.com/ruby-grape/grape/pull/2975): Hold a static `values` or `except_values` collection as it came instead of behind a lambda that only hands it back - [@ericproulx](https://github.com/ericproulx).
+* [#2976](https://github.com/ruby-grape/grape/pull/2976): Replace a registry on registration instead of writing into it, so a registered formatter, parser, params builder, validator or versioner cannot be changed underneath a reader - [@ericproulx](https://github.com/ericproulx).
+* [#2982](https://github.com/ruby-grape/grape/pull/2982): Check `Boolean` values directly instead of through `Grape::API::Boolean.build` - [@ericproulx](https://github.com/ericproulx).
+* [#2986](https://github.com/ruby-grape/grape/pull/2986): Match a header-versioned vendor declared with capitals - [@ericproulx](https://github.com/ericproulx).
+* [#2987](https://github.com/ruby-grape/grape/pull/2987): Match a header version or content type declared with capitals - [@ericproulx](https://github.com/ericproulx).
+* [#2988](https://github.com/ruby-grape/grape/pull/2988): Drop the routed-version check left behind in `Versioner::Path#before` - [@ericproulx](https://github.com/ericproulx).
+* [#2989](https://github.com/ruby-grape/grape/pull/2989): Leave the API format untouched when `format` rejects one with no content type - [@ericproulx](https://github.com/ericproulx).
+* [#2990](https://github.com/ruby-grape/grape/pull/2990): Name a nested array element by its own indices when a Hash scope sits between two Array scopes - [@ericproulx](https://github.com/ericproulx).
+* [#2991](https://github.com/ruby-grape/grape/pull/2991): Require exactly one name for a `requires` or `optional` block - [@ericproulx](https://github.com/ericproulx).
+* [#2992](https://github.com/ruby-grape/grape/pull/2992): Accept a beginless range of `values` for a bare `Array` type - [@ericproulx](https://github.com/ericproulx).
+* [#2993](https://github.com/ruby-grape/grape/pull/2993): Say a param is invalid when its validation error has no message, instead of naming the exception class - [@ericproulx](https://github.com/ericproulx).
+* [#2994](https://github.com/ruby-grape/grape/pull/2994): Honour the message of a `coerce:` option given as `{ value:, message: }` - [@ericproulx](https://github.com/ericproulx).
+* [#2995](https://github.com/ruby-grape/grape/pull/2995): Merge a middleware's headers with a guard clause instead of a `case` - [@ericproulx](https://github.com/ericproulx).
+* [#2996](https://github.com/ruby-grape/grape/pull/2996): Cover the header versioner's last two branches - [@ericproulx](https://github.com/ericproulx).
+* [#2997](https://github.com/ruby-grape/grape/pull/2997): Cover the router's missed branches and drop its dead guards - [@ericproulx](https://github.com/ericproulx).
+* [#2998](https://github.com/ruby-grape/grape/pull/2998): Drop the unused `simplecov-lcov` setup; Coveralls reads SimpleCov's own results - [@ericproulx](https://github.com/ericproulx).
+* [#3001](https://github.com/ruby-grape/grape/pull/3001): Drop the safe navigation on the declared handler's contract key maps - [@ericproulx](https://github.com/ericproulx).
+* [#3002](https://github.com/ruby-grape/grape/pull/3002): Render an XML error without checking for `to_xml` - [@ericproulx](https://github.com/ericproulx).
+* [#3004](https://github.com/ruby-grape/grape/pull/3004): Stop copying the formatter and calling empty filter phases per request - [@ericproulx](https://github.com/ericproulx).
+* [#3005](https://github.com/ruby-grape/grape/pull/3005): Load rails before grape in the Rails gemfiles so the specs exercise loading `Grape::Railtie` - [@ericproulx](https://github.com/ericproulx).
+* [#3006](https://github.com/ruby-grape/grape/pull/3006): Answer params and versions holding invalid bytes instead of raising `ArgumentError` - [@ericproulx](https://github.com/ericproulx).
+* [#3007](https://github.com/ruby-grape/grape/pull/3007): Reserve `blank?` and `present?` for outside input and check Grape's own values precisely - [@ericproulx](https://github.com/ericproulx).
+* [#3009](https://github.com/ruby-grape/grape/pull/3009): Fold `SingleAttributeIterator` and `MultipleAttributesIterator` into `AttributesIterator` - [@ericproulx](https://github.com/ericproulx).
+* [#3010](https://github.com/ruby-grape/grape/pull/3010): Reject `nil` for a required param with `values` in a nested scope, as the root scope does - [@ericproulx](https://github.com/ericproulx).
+* [#3011](https://github.com/ruby-grape/grape/pull/3011): Reject a number with a fractional part for an `Integer` param instead of truncating it - [@ericproulx](https://github.com/ericproulx).
+* [#3012](https://github.com/ruby-grape/grape/pull/3012): Route a mounted Rack app as an ANY route in the order it was mounted - [@ericproulx](https://github.com/ericproulx).
+* [#3013](https://github.com/ruby-grape/grape/pull/3013): Read a header version holding a hyphen, such as `2024-06-20`, whole - [@ericproulx](https://github.com/ericproulx).
+* [#3014](https://github.com/ruby-grape/grape/pull/3014): Validate a blank element of an optional Array block when other elements are not blank - [@ericproulx](https://github.com/ericproulx).
+* [#3015](https://github.com/ruby-grape/grape/pull/3015): Answer in the default format when a negotiated format cannot render the body, instead of 500 - [@ericproulx](https://github.com/ericproulx).
+* [#3016](https://github.com/ruby-grape/grape/pull/3016): Stop copying the error middleware on requests that do not fail - [@ericproulx](https://github.com/ericproulx).
+* [#3017](https://github.com/ruby-grape/grape/pull/3017): Stop copying the header versioner per request for an Accept header it answers from its table - [@ericproulx](https://github.com/ericproulx).
+* [#3018](https://github.com/ruby-grape/grape/pull/3018): Stop copying the auth middleware per request - [@ericproulx](https://github.com/ericproulx).
+* [#3023](https://github.com/ruby-grape/grape/pull/3023): Raise from `error!` instead of throwing `:error`, so a transaction it leaves rolls back - [@ericproulx](https://github.com/ericproulx).
+* [#3024](https://github.com/ruby-grape/grape/pull/3024): Keep a logger set on one API from replacing every other API's - [@ericproulx](https://github.com/ericproulx).
+* [#3026](https://github.com/ruby-grape/grape/pull/3026): Answer `cascade` false from the reader for a version declared with `cascade: false` - [@ericproulx](https://github.com/ericproulx).
+* [#3027](https://github.com/ruby-grape/grape/pull/3027): Scrub outside input through one helper, `Grape::Util::Scrub` - [@ericproulx](https://github.com/ericproulx).
+* [#3028](https://github.com/ruby-grape/grape/pull/3028): Resolve a scope's request params in `ParamsScope` instead of the params DSL - [@ericproulx](https://github.com/ericproulx).
+* [#3030](https://github.com/ruby-grape/grape/pull/3030): Restore the Error middleware's two defaults without restating every option - [@ericproulx](https://github.com/ericproulx).
+* [#3035](https://github.com/ruby-grape/grape/pull/3035): Define `requires` and `optional` from one definition - [@ericproulx](https://github.com/ericproulx).
+* [#3036](https://github.com/ruby-grape/grape/pull/3036): Hold every method to RuboCop's default cyclomatic complexity - [@ericproulx](https://github.com/ericproulx).
+* [#3037](https://github.com/ruby-grape/grape/pull/3037): Hold every method to RuboCop's default perceived complexity - [@ericproulx](https://github.com/ericproulx).
+* [#3033](https://github.com/ruby-grape/grape/pull/3033): Allocate less per request when presenting an entity or reading path params - [@ericproulx](https://github.com/ericproulx).
+* [#3034](https://github.com/ruby-grape/grape/pull/3034): Shrink each request's copy of its endpoint - [@ericproulx](https://github.com/ericproulx).
+* [#3038](https://github.com/ruby-grape/grape/pull/3038): Hold every method to RuboCop's default ABC size - [@ericproulx](https://github.com/ericproulx).
+* [#3039](https://github.com/ruby-grape/grape/pull/3039): Hold every module to RuboCop's default length - [@ericproulx](https://github.com/ericproulx).
+* [#3031](https://github.com/ruby-grape/grape/pull/3031): Define `InheritableSetting`'s scalar settings and scope flags by key - [@ericproulx](https://github.com/ericproulx).
+* [#3032](https://github.com/ruby-grape/grape/pull/3032): Keep each API's content type order when negotiating a browser's `*/*` - [@ericproulx](https://github.com/ericproulx).
+* [#3042](https://github.com/ruby-grape/grape/pull/3042): Answer `HEAD` without a body from a mounted Rack app by wrapping the router in `Rack::Head` - [@ericproulx](https://github.com/ericproulx).
+
+### 4.0.1 (2026-09-15)
+
+#### Fixes
+
+* [#2946](https://github.com/ruby-grape/grape/pull/2946): Stop reading a class-level setting on an API with nested mounts from remounting the whole mount tree - [@ericproulx](https://github.com/ericproulx).
+
+### 4.0.0 (2026-09-07)
+
+#### Features
+
+* [#2768](https://github.com/ruby-grape/grape/pull/2768): Remove Guard - [@ericproulx](https://github.com/ericproulx).
+* [#2774](https://github.com/ruby-grape/grape/pull/2774): Make `forward_match` an internal kwarg instead of a route option - [@ericproulx](https://github.com/ericproulx).
+* [#2775](https://github.com/ruby-grape/grape/pull/2775): Pass `http_methods` to `Grape::Endpoint` as a keyword instead of via options - [@ericproulx](https://github.com/ericproulx).
+* [#2776](https://github.com/ruby-grape/grape/pull/2776): Pass `path` to `Grape::Endpoint` as a keyword instead of via options - [@ericproulx](https://github.com/ericproulx).
+* [#2777](https://github.com/ruby-grape/grape/pull/2777): Add `Grape::Endpoint#mounted_app` reader and `app:` keyword - [@ericproulx](https://github.com/ericproulx).
+* [#2778](https://github.com/ruby-grape/grape/pull/2778): Rename `Grape::Endpoint`'s `for:` keyword to `api:` and expose `#api` - [@ericproulx](https://github.com/ericproulx).
+* [#2779](https://github.com/ruby-grape/grape/pull/2779): Promote route metadata (`version`, `namespace`, `prefix`, `requirements`, `anchor`, `settings`) to `Grape::Router::Route` keyword arguments, and drop the unused `Grape::Endpoint::Options` `format` member - [@ericproulx](https://github.com/ericproulx).
+* [#2782](https://github.com/ruby-grape/grape/pull/2782): Remove the dead `format` keyword from `Grape::Router::Pattern` - [@ericproulx](https://github.com/ericproulx).
+* [#2783](https://github.com/ruby-grape/grape/pull/2783): Read a route's `version`, `anchor` and `requirements` from its pattern instead of storing them again on the route - [@ericproulx](https://github.com/ericproulx).
+* [#2784](https://github.com/ruby-grape/grape/pull/2784): Move HEAD route creation into `Grape::Router::Route#to_head` - [@ericproulx](https://github.com/ericproulx).
+* [#2787](https://github.com/ruby-grape/grape/pull/2787): Stop populating the write-only `namespace_setting(:description)` in `desc` - [@ericproulx](https://github.com/ericproulx).
+* [#2795](https://github.com/ruby-grape/grape/pull/2795): Make `Grape::Util::InheritableSetting#namespace_reverse_stackable` internal, exposing `rescue_handlers` / `base_only_rescue_handlers` / `add_rescue_handlers` instead - [@ericproulx](https://github.com/ericproulx).
+* [#2793](https://github.com/ruby-grape/grape/pull/2793): Add a `Grape::Mountable` marker to identify a Grape app instead of duck-typing on `respond_to?(:inheritable_setting)` - [@ericproulx](https://github.com/ericproulx).
+* [#2792](https://github.com/ruby-grape/grape/pull/2792): Move `Grape::Path` to `Grape::Router::Pattern::Path` and add a `Grape::Router::Pattern.build` factory (`Grape::Path` kept as a deprecated constant) - [@ericproulx](https://github.com/ericproulx).
+* [#2785](https://github.com/ruby-grape/grape/pull/2785): Make route `params` a first-class endpoint input and split `Grape::Router::Route#params` into `#params` (declared definitions) and `#params_for(input)` (extracted values) - [@ericproulx](https://github.com/ericproulx).
+* [#2786](https://github.com/ruby-grape/grape/pull/2786): Make route `requirements` and `anchor` explicit keyword arguments and first-class endpoint inputs instead of opaque `route_options` keys - [@ericproulx](https://github.com/ericproulx).
+* [#2788](https://github.com/ruby-grape/grape/pull/2788): Compare the base API instead of `to_s` when refreshing a mounted app - [@ericproulx](https://github.com/ericproulx).
+* [#2796](https://github.com/ruby-grape/grape/pull/2796): Remove `Grape::Util::ReverseStackableValues`, storing rescue handlers in plain per-scope hashes merged over `InheritableSetting#parent` - [@ericproulx](https://github.com/ericproulx).
+* [#2797](https://github.com/ruby-grape/grape/pull/2797): Internalize params state (validations, declared params, param documentation, named params) behind `Grape::Util::InheritableSetting` accessors, and remove the unused `api_class` / `point_in_time_copies` readers - [@ericproulx](https://github.com/ericproulx).
+* [#2798](https://github.com/ruby-grape/grape/pull/2798): Internalize callback filters behind `Grape::Util::InheritableSetting` accessors (`callbacks` / `add_callback`) - [@ericproulx](https://github.com/ericproulx).
+* [#2799](https://github.com/ruby-grape/grape/pull/2799): Internalize the remaining rescue configuration (`rescue_options`, meta-selector handlers and flags) behind `Grape::Util::InheritableSetting` accessors - [@ericproulx](https://github.com/ericproulx).
+* [#2800](https://github.com/ruby-grape/grape/pull/2800): Internalize content negotiation state (content types, formatters, parsers, error formatters) behind `Grape::Util::InheritableSetting` accessors - [@ericproulx](https://github.com/ericproulx).
+* [#2801](https://github.com/ruby-grape/grape/pull/2801): Internalize `represent` registrations behind `Grape::Util::InheritableSetting` accessors (`representations` / `add_representation`), and remove the inert `:representations` seeding in `Grape::Endpoint#initialize` - [@ericproulx](https://github.com/ericproulx).
+* [#2802](https://github.com/ruby-grape/grape/pull/2802): Internalize middleware and helper registrations behind `Grape::Util::InheritableSetting` accessors (`middleware` / `add_middleware`, `helpers` / `add_helper`) - [@ericproulx](https://github.com/ericproulx).
+* [#2803](https://github.com/ruby-grape/grape/pull/2803): Internalize namespace and mount-path registrations behind `Grape::Util::InheritableSetting` accessors (`namespaces` / `add_namespace` / `namespace_path` / `namespace_requirements`, `mount_path` / `add_mount_path`) - [@ericproulx](https://github.com/ericproulx).
+* [#2804](https://github.com/ruby-grape/grape/pull/2804): Internalize contract key maps behind `Grape::Util::InheritableSetting` accessors (`contract_key_maps` / `add_contract_key_map`) - [@ericproulx](https://github.com/ericproulx).
+* [#2805](https://github.com/ruby-grape/grape/pull/2805): Internalize format and error-response defaults behind `Grape::Util::InheritableSetting` accessors (`format`, `default_format`, `default_error_formatter`, `default_error_status`) - [@ericproulx](https://github.com/ericproulx).
+* [#2806](https://github.com/ruby-grape/grape/pull/2806): Internalize versioning state behind `Grape::Util::InheritableSetting` accessors (`version`, `version_options`, `root_prefix`, `cascade` / `cascade_defined?`) - [@ericproulx](https://github.com/ericproulx).
+* [#2808](https://github.com/ruby-grape/grape/pull/2808): Internalize `build_params_with` and `auth` behind `Grape::Util::InheritableSetting` accessors - [@ericproulx](https://github.com/ericproulx).
+* [#2807](https://github.com/ruby-grape/grape/pull/2807): Internalize routing scope flags behind `Grape::Util::InheritableSetting` accessors (`do_not_route_head`, `do_not_route_options`, `do_not_document`, `lint` — `!` writers / `?` readers), and drop the vestigial `namespace_inheritable` hash copy in `Grape::API::Instance`'s route-config collection - [@ericproulx](https://github.com/ericproulx).
+* [#2810](https://github.com/ruby-grape/grape/pull/2810): Make `Grape::Util::InheritableSetting`'s raw stores internal where the ecosystem allows: `namespace_inheritable` is now protected and `namespace_stackable_with_hash` private, while `namespace_stackable` stays public for grape-swagger; `Router::Pattern::Path` reads a dedicated `path_settings` snapshot, and `mount_paths` exposes the full mount-path stack - [@ericproulx](https://github.com/ericproulx).
+* [#2811](https://github.com/ruby-grape/grape/pull/2811): Internalize the route scope behind `Grape::Util::InheritableSetting` accessors (`route_validations`, `route_declared_params`, `route_renamed_params` / `add_route_renamed_param`, `route_description`, `route_settings`, `route_setting`, `inherit_route_params`), so no external code touches the raw `route` store - [@ericproulx](https://github.com/ericproulx).
+* [#2823](https://github.com/ruby-grape/grape/pull/2823): Move stackable settings storage onto `Grape::Util::InheritableSetting`, resolving inheritance by walking `parent` instead of a second chain; `Grape::Util::StackableValues` becomes a read-only view kept for grape-swagger, and `Grape::Util::BaseInheritable` is removed - [@ericproulx](https://github.com/ericproulx).
+* [#2828](https://github.com/ruby-grape/grape/pull/2828): Compare `Grape::Util::InheritableSetting` by own state instead of serializing both chains through `to_hash`, and give `Grape::Util::InheritableValues` an `==`, so the duplicate-route check in `route` stops costing O(n²) `to_hash` calls on APIs whose namespaces share relative paths - [@ericproulx](https://github.com/ericproulx).
+* [#2831](https://github.com/ruby-grape/grape/pull/2831): Document and test open (beginless/endless) `Range`s as a `values:`/`except_values:` alternative to a dedicated numericality validator - [@dblock](https://github.com/dblock).
+* [#2830](https://github.com/ruby-grape/grape/pull/2830): Remove `Grape::Util::InheritableValues`, resolving inheritable settings by walking `Grape::Util::InheritableSetting#parent` instead of layering a second chain of stores, and keep namespace settings in a plain Hash - [@ericproulx](https://github.com/ericproulx).
+* [#2837](https://github.com/ruby-grape/grape/pull/2837): Document the definition-time rejection of an `Array`/`Set` of an uncoercible element type introduced by #2817, and pin it with specs - [@ericproulx](https://github.com/ericproulx).
+* [#2836](https://github.com/ruby-grape/grape/pull/2836): Define `#hash` alongside the `eql?`/`==` pairs on `Grape::Endpoint`, `Grape::Util::InheritableSetting`, `Grape::Middleware::Stack::Middleware`, `Grape::ServeStream::StreamResponse` and `Grape::ServeStream::FileBody`, so equal objects hash alike in a `Hash`, `Set` or `uniq` - [@ericproulx](https://github.com/ericproulx).
+* [#2835](https://github.com/ruby-grape/grape/pull/2835): Return the compiled instance from `Grape::API::Instance.compile!` so `call` and `recognize_path` no longer re-read `@instance`, which a concurrent `change!` could nil between the two reads - [@ericproulx](https://github.com/ericproulx).
+* [#2849](https://github.com/ruby-grape/grape/pull/2849): Remove `http_digest`, which has had no strategy behind it since 2.0.0 and raised on the first request rather than when the API was defined (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2862](https://github.com/ruby-grape/grape/pull/2862): Rename the `desc` `default` key to `default_response`, the name grape-swagger reads, deprecating `default` (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2866](https://github.com/ruby-grape/grape/pull/2866): Take `as` as a keyword argument in `requires` and `optional` instead of carrying it in the options Hash, where it was dispatched as a no-op `AsValidator` - [@ericproulx](https://github.com/ericproulx).
+* [#2867](https://github.com/ruby-grape/grape/pull/2867): Extract the shared body of `requires` and `optional` into one private declaration, and drop `validate_attributes`, whose only step defaulted a type that no declaration could reach - [@ericproulx](https://github.com/ericproulx).
+* [#2870](https://github.com/ruby-grape/grape/pull/2870): Take `declared_params_scope` as a keyword argument in `push_declared_params` instead of stamping it into the caller's options Hash - [@ericproulx](https://github.com/ericproulx).
+* [#2869](https://github.com/ruby-grape/grape/pull/2869): Add `Grape::PrecompiledJson`, a body wrapper the JSON formatters serve verbatim instead of encoding a second time - [@ericproulx](https://github.com/ericproulx).
+* [#2878](https://github.com/ruby-grape/grape/pull/2878): Build an error response's backtrace only when `rescue_from ..., backtrace: true` asked for one (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2873](https://github.com/ruby-grape/grape/pull/2873): Read `Grape.config[:param_builder]` instead of routing the per-request lookup through dry-configurable's `method_missing` - [@ericproulx](https://github.com/ericproulx).
+* [#2877](https://github.com/ruby-grape/grape/pull/2877): Write `route_info` into the path captures in `Grape::Router#process_route` instead of merging a second Hash into it - [@ericproulx](https://github.com/ericproulx).
+* [#2874](https://github.com/ruby-grape/grape/pull/2874): Test the `Grape::Util::PathNormalizer` fast path with two `String#include?` calls instead of a regexp - [@ericproulx](https://github.com/ericproulx).
+* [#2876](https://github.com/ruby-grape/grape/pull/2876): Return a bare Rack tuple from `Grape::Middleware::Formatter` instead of a `Rack::Response` the enclosing middleware immediately unwraps - [@ericproulx](https://github.com/ericproulx).
+* [#2875](https://github.com/ruby-grape/grape/pull/2875): Skip the query-string parse and the `script_name + path_info` concatenation during content negotiation when neither can affect the result - [@ericproulx](https://github.com/ericproulx).
+* [#2879](https://github.com/ruby-grape/grape/pull/2879): Skip path-param extraction for routes whose compiled pattern captures nothing, instead of re-running the regexp to build an empty Hash - [@ericproulx](https://github.com/ericproulx).
+* [#2880](https://github.com/ruby-grape/grape/pull/2880): Remove `Grape::Middleware::Versioner`'s `pattern` option, a leftover of the 2010 versioner that `versions:` superseded and the `version` DSL never exposed (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2872](https://github.com/ruby-grape/grape/pull/2872): Include an endpoint's helpers once at compile time instead of on every request, so a request no longer builds a singleton class whose method cache starts cold (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2882](https://github.com/ruby-grape/grape/pull/2882): Strip mount path and prefix in `Grape::Middleware::Versioner::Path` with `each` instead of `Enumerable#reduce` - [@ericproulx](https://github.com/ericproulx).
+* [#2881](https://github.com/ruby-grape/grape/pull/2881): Decide whether a request carries a body from the env, so `Grape::Middleware::Formatter` no longer builds a `Rack::Request` for GET, HEAD and OPTIONS - [@ericproulx](https://github.com/ericproulx).
+* [#2883](https://github.com/ruby-grape/grape/pull/2883): Resolve a format's content type through a plain Hash carrying both spellings instead of a `HashWithIndifferentAccess` that converts the key on every read - [@ericproulx](https://github.com/ericproulx).
+* [#2887](https://github.com/ruby-grape/grape/pull/2887): Add support for the HTTP `QUERY` method (RFC 10008), including the `query` DSL verb and parsing the request content into `params` - [@ericproulx](https://github.com/ericproulx).
+* [#2885](https://github.com/ruby-grape/grape/pull/2885): Share the content-type lookup and mime-type tables between middleware instances that register the same content types, instead of building a copy per API - [@ericproulx](https://github.com/ericproulx).
+* [#2891](https://github.com/ruby-grape/grape/pull/2891): Look registrations up in a plain Hash carrying both spellings instead of a `HashWithIndifferentAccess` - [@ericproulx](https://github.com/ericproulx).
+* [#2888](https://github.com/ruby-grape/grape/pull/2888): Resolve an API instance's cascade setting once at compile time instead of walking the settings chain on every request - [@ericproulx](https://github.com/ericproulx).
+* [#2889](https://github.com/ruby-grape/grape/pull/2889): Constrain the `:version` capture with a `Regexp` so Mustermann stops registering an identity param converter, which was defeating its `identity_params?` fast path on every path-versioned request - [@ericproulx](https://github.com/ericproulx).
+* [#2890](https://github.com/ruby-grape/grape/pull/2890): Read the path version off the route the router already matched instead of re-deriving it from `PATH_INFO` in `Grape::Middleware::Versioner::Path` - [@ericproulx](https://github.com/ericproulx).
+* [#2892](https://github.com/ruby-grape/grape/pull/2892): Resolve the params builder when `params` are first read rather than in every `Grape::Request` - [@ericproulx](https://github.com/ericproulx).
+* [#2893](https://github.com/ruby-grape/grape/pull/2893): Scrub the format extension rather than the whole request path when negotiating a format - [@ericproulx](https://github.com/ericproulx).
+* [#2894](https://github.com/ruby-grape/grape/pull/2894): Read the request method once in `default_status` instead of asking through `post?` and `delete?` - [@ericproulx](https://github.com/ericproulx).
+* [#2895](https://github.com/ruby-grape/grape/pull/2895): Cut per-request work out of the endpoint, validation and router paths: scan the router's compiled union by capture number rather than by name, skip the Array boxing in `AttributesIterator` for a flat scope, read a coerced attribute once instead of three times, and resolve the formatter's config and the coercers' type checks once at build time - [@ericproulx](https://github.com/ericproulx).
+* [#2900](https://github.com/ruby-grape/grape/pull/2900): Remove the deprecations announced in 3.2 and 3.3: `Grape::Router.normalize_path`, Hash access on middleware `Options` and their `DEFAULT_OPTIONS` constants, the positional options Hash for `auth`/`http_basic`/`desc`, a Hash returned from a `rescue_from` handler, and `@option` on validators (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2896](https://github.com/ruby-grape/grape/pull/2896): Bring test suite line coverage to 100% - [@dblock](https://github.com/dblock).
+* [#2897](https://github.com/ruby-grape/grape/pull/2897): Improve test suite branch coverage - [@dblock](https://github.com/dblock).
+* [#2909](https://github.com/ruby-grape/grape/pull/2909): Standardize bare Ruby exception messages (`ArgumentError`, etc.) to lowercase, unpunctuated, matching Ruby's own core/stdlib style, and wrap interpolated values in backticks via `rubocop-exception_messages` - [@dblock](https://github.com/dblock).
+
+#### Fixes
+
+* [#2899](https://github.com/ruby-grape/grape/pull/2899): Derive `Grape.deprecator`'s deprecation horizon from `Grape::VERSION` instead of the hardcoded `2.0` it has announced since 2023 - [@ericproulx](https://github.com/ericproulx).
+* [#2898](https://github.com/ruby-grape/grape/pull/2898): Stop eager loading `grape/testing`, so the module is opt-in as its 3.3 release note has always said instead of being installed in every process (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2767](https://github.com/ruby-grape/grape/pull/2767): Update rubocop to 1.88.0 and rubocop-rspec to 3.10.2 - [@ericproulx](https://github.com/ericproulx).
+* [#2863](https://github.com/ruby-grape/grape/pull/2863): Enable `Style/MutableConstant`'s `Recursive` option, so a literal nested inside a frozen constant has to be frozen too - [@ericproulx](https://github.com/ericproulx).
+* [#2816](https://github.com/ruby-grape/grape/pull/2816): Guard `length`, `same_as` and `oneof` validators against non-hash params (500 → 400) - [@ericproulx](https://github.com/ericproulx).
+* [#2815](https://github.com/ruby-grape/grape/pull/2815): Fix line-anchored regexes: `type: JSON` payloads containing a blank line were silently coerced to `nil` - [@ericproulx](https://github.com/ericproulx).
+* [#2817](https://github.com/ruby-grape/grape/pull/2817): Remove request-time mutable state from Array and custom-type coercers, which also makes an `Array`/`Set` of an uncoercible element type raise when the API is defined instead of on the first request that supplies it (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2819](https://github.com/ruby-grape/grape/pull/2819): Freeze coercers at construction, synchronize `Grape::Util::Cache` lookups, and assign `Route#regexp_capture_index` eagerly - [@ericproulx](https://github.com/ericproulx).
+* [#2825](https://github.com/ruby-grape/grape/pull/2825): Stop `present` entity autodetection from picking up a top-level `::Entity` constant - [@ericproulx](https://github.com/ericproulx).
+* [#2827](https://github.com/ruby-grape/grape/pull/2827): Make the `cascade` DSL getter return the configured value (`cascade false` read back as `true`) - [@ericproulx](https://github.com/ericproulx).
+* [#2829](https://github.com/ruby-grape/grape/pull/2829): Fix a cascading route handing over only to the last route registered for the path, making a middle version (3+ mounted versions with a catch-all) answer 406 - [@ericproulx](https://github.com/ericproulx).
+* [#2826](https://github.com/ruby-grape/grape/pull/2826): Fix `api.version` not being set for the root route of a path-versioned API (`GET /v1`) - [@ericproulx](https://github.com/ericproulx).
+* [#2844](https://github.com/ruby-grape/grape/pull/2844): Look an entity up by the presented object's own class before treating it as a collection, so `represent` is no longer skipped for models that respond to `#first` or `#klass` - [@ericproulx](https://github.com/ericproulx).
+* [#2847](https://github.com/ruby-grape/grape/pull/2847): Match `Accept` media types case-insensitively, so a differently-cased header still negotiates the content type and resolves a vendor version - [@ericproulx](https://github.com/ericproulx).
+* [#2838](https://github.com/ruby-grape/grape/pull/2838): Reject request params nested in more arrays than the block declares, instead of silently unwrapping them and passing validation, and report `type: Array[JSON]` errors against the element that failed - [@ericproulx](https://github.com/ericproulx).
+* [#2842](https://github.com/ruby-grape/grape/pull/2842): Warn at definition time when a `rescue_from` class is already covered by one registered earlier in the same scope, since the later handler never runs - [@ericproulx](https://github.com/ericproulx).
+* [#2853](https://github.com/ruby-grape/grape/pull/2853): Restore, behind a deprecation warning, the trailing positional options Hash of `requires`, `optional` and `use`, which #2618 turned into a parameter name - [@ericproulx](https://github.com/ericproulx).
+* [#2856](https://github.com/ruby-grape/grape/pull/2856): Update simplecov - [@ericproulx](https://github.com/ericproulx).
+* [#2841](https://github.com/ruby-grape/grape/pull/2841): Stop `use`, `helpers`, `rescue_from` and other registrations declared below a route from reaching it when an earlier registration had seeded the same key (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2846](https://github.com/ruby-grape/grape/pull/2846): Keep a `:version` path capture in `params` when the API declares no version, instead of always dropping it as Grape's own - [@ericproulx](https://github.com/ericproulx).
+* [#2839](https://github.com/ruby-grape/grape/pull/2839): Tag path params as UTF-8 instead of leaving them ASCII-8BIT, so they compare equal to the non-ASCII literals an API declares (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2845](https://github.com/ruby-grape/grape/pull/2845): Render `redirect`'s default message as the plain text its content type announces, instead of letting the API's formatter re-encode it (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2840](https://github.com/ruby-grape/grape/pull/2840): Answer 500 instead of letting an exception escape the middleware stack when an error response cannot be rendered, exposing it on `rack.exception` and writing it to `rack.errors` so error trackers keep reporting it, with `Grape.config.raise_rendering_errors` to opt back out (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2855](https://github.com/ruby-grape/grape/pull/2855): Expose an unhandled exception raised inside a `rescue_from` block on `rack.exception`, so error trackers report it instead of the generic 500 arriving silently - [@ericproulx](https://github.com/ericproulx).
+* [#2843](https://github.com/ruby-grape/grape/pull/2843): Let `rescue_from :grape_exceptions` take precedence over a catch-all registered as a class, so Grape errors keep their own status (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2858](https://github.com/ruby-grape/grape/pull/2858): Define `Grape::Router::GreedyRoute#params_for` instead of letting the call fall through to the route's options Hash - [@ericproulx](https://github.com/ericproulx).
+* [#2859](https://github.com/ruby-grape/grape/pull/2859): Answer `Grape::Router::Route#success` and `#failure` from the description whichever way it was written - [@ericproulx](https://github.com/ericproulx).
+* [#2861](https://github.com/ruby-grape/grape/pull/2861): Read `Grape::Router::Route#default` from the description instead of from the options Hash's own default value, which was always `nil` - [@ericproulx](https://github.com/ericproulx).
+* [#2864](https://github.com/ruby-grape/grape/pull/2864): Apply a group's type check to `optional` the same way as `requires`, so a type supplied by an enclosing `with` is no longer invisible to it (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2865](https://github.com/ruby-grape/grape/pull/2865): Pass `required` from `requires`/`optional` as an argument instead of writing a `presence` key into the caller's options, deprecating a user-supplied `presence` and letting a `with` block's `message` reach the presence validator (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2871](https://github.com/ruby-grape/grape/pull/2871): Move the endpoint replacement behind `mount`'s private re-mounting path, deprecating the undocumented `refresh_already_mounted` option, and recognise a mount mapping by `Hash` rather than by `respond_to?(:each_pair)` (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2886](https://github.com/ruby-grape/grape/pull/2886): Compile the router's optimized map from the registered routes, so a route declared with a verb outside `Grape::HTTP_SUPPORTED_METHODS` is served instead of being advertised in `Allow` and answered with 405 - [@ericproulx](https://github.com/ericproulx).
+* [#2901](https://github.com/ruby-grape/grape/pull/2901): Reject `error_formatter` without a formatter instead of registering `nil`, which left the format with no error formatter at all and answered every error for it with a failsafe 500 (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2902](https://github.com/ruby-grape/grape/pull/2902): Make `Grape::ErrorFormatter.formatter_for` a lookup that answers `nil` for an unregistered format, like `Grape::Parser.parser_for`, and move the `default_error_formatter` / `Grape::ErrorFormatter::Txt` fallback to `Grape::Middleware::Error`, which owns it; `default_error_formatter` naming nothing registered now raises `Grape::Exceptions::UnknownErrorFormatter` instead of silently storing `Txt` (see UPGRADING) - [@ericproulx](https://github.com/ericproulx).
+* [#2904](https://github.com/ruby-grape/grape/pull/2904): Document and spec route `requirements` given as a Mustermann capture type, which constrains the match and hands the endpoint the converted value - [@ericproulx](https://github.com/ericproulx).
+* [#2905](https://github.com/ruby-grape/grape/pull/2905): Nest any `route_param` requirement under the param name, not just a Regexp, and reject the `requirements` shapes that have no param to attach to where they are written rather than on the first request - [@ericproulx](https://github.com/ericproulx).
+* [#2908](https://github.com/ruby-grape/grape/pull/2908): Stop reassigning method parameters across `lib`, so a parameter keeps the value its caller passed for the whole method; the `oneof` collection in `Grape::Validations::ParamsScope` no longer writes into the Hash it was given - [@ericproulx](https://github.com/ericproulx).
+* [#2910](https://github.com/ruby-grape/grape/pull/2910): Restore `Grape::Middleware::Formatter`'s in-place content-type negotiation as `ensure_content_type!`, which #2908 had turned into a copy of the response headers on every response - [@ericproulx](https://github.com/ericproulx).
+* [#2911](https://github.com/ruby-grape/grape/pull/2911): Copy response headers with `merge!` instead of `merge` in `Grape::API::Instance#call` and `Grape::Middleware::Error`, which allocated a `Grape::Util::Header` only to discard it - [@ericproulx](https://github.com/ericproulx).
+* [#2907](https://github.com/ruby-grape/grape/pull/2907): Stop `Grape::Endpoint::Options` from appending the default `'/'` into the path Array it was given, so declaring a route with an empty Array of paths inside a `namespace`, `resource`, `group` or `route_param` block no longer mutates the caller's Array — and raises `FrozenError` at boot when it is frozen - [@ericproulx](https://github.com/ericproulx).
+* [#2912](https://github.com/ruby-grape/grape/pull/2912): Correct the 4.0.0 release notes and file the `http_digest` removal note under `Upgrading to >= 4.0.0` - [@ericproulx](https://github.com/ericproulx).
+
+### 3.3.5 (2026-07-30)
+
+#### Fixes
+
+* [#2814](https://github.com/ruby-grape/grape/pull/2814): Fix `type: [A, B]` combined with `values:`/`except_values:` raising `IncompatibleOptionValues` at definition time - [@ericproulx](https://github.com/ericproulx).
+* [#2833](https://github.com/ruby-grape/grape/pull/2833): Fix `Grape::API::Instance.to_s` returning an empty string instead of the class name when the instance has no base (regression since 3.0.0) - [@ericproulx](https://github.com/ericproulx).
+* [#2834](https://github.com/ruby-grape/grape/pull/2834): Fix cascaded routes (`X-Cascade: pass`) leaking `route_info` and path captures into the next matched route's `route` and `params` - [@ericproulx](https://github.com/ericproulx).
+
+### 3.3.4 (2026-07-25)
+
+#### Fixes
+
+* [#2812](https://github.com/ruby-grape/grape/pull/2813): Fix `type: Array` combined with `values: [...]` list coercing to the guessed element type instead of `Array` - [@schinery](https://github.com/schinery).
+
+### 3.3.3 (2026-07-17)
+
+#### Fixes
+
+* [#2794](https://github.com/ruby-grape/grape/pull/2794): Fix `rescue_from Klass, rescue_subclasses: false` never rescuing — base-only handlers were written to and read from different settings stores - [@ericproulx](https://github.com/ericproulx).
+* [#2789](https://github.com/ruby-grape/grape/pull/2789): Escape error messages served with a parameterized `text/html` content-type (e.g. `text/html; charset=utf-8`) and warn when a bare Rack app is mounted under authentication - [@ericproulx](https://github.com/ericproulx).
+* [#2790](https://github.com/ruby-grape/grape/pull/2790): Stop mutating `Grape::Router`'s internal maps at request time for HTTP methods with no routes (data race on JRuby/TruffleRuby and unbounded growth) - [@ericproulx](https://github.com/ericproulx).
+* [#2791](https://github.com/ruby-grape/grape/pull/2791): Build HEAD/OPTIONS/405 helper routes from a copy of the inheritable settings instead of temporarily mutating the shared class-level settings during compilation - [@ericproulx](https://github.com/ericproulx).
+
+### 3.3.2 (2026-07-05)
+
+#### Fixes
+
+* [#2773](https://github.com/ruby-grape/grape/pull/2773): Fix middleware build crash when a top-level `::Options` constant is in scope - [@ericproulx](https://github.com/ericproulx).
+
+### 3.3.1 (2026-06-28)
+
+#### Fixes
+
+* [#2770](https://github.com/ruby-grape/grape/pull/2770): Avoid per-entry array allocation in `Request#build_headers` - [@ericproulx](https://github.com/ericproulx).
+* [#2771](https://github.com/ruby-grape/grape/pull/2771): Fix double wrap on json errors - [@MattHall](https://github.com/MattHall).
+
+### 3.3.0 (2026-06-20)
+
+#### Features
+
+* [#2679](https://github.com/ruby-grape/grape/pull/2679): Extract entity dsl and refactor :with to keyword argument - [@ericproulx](https://github.com/ericproulx).
+* [#2681](https://github.com/ruby-grape/grape/pull/2681): Extract `Grape::Endpoint.before_each` into `Grape::Testing` - [@ericproulx](https://github.com/ericproulx).
+* [#2686](https://github.com/ruby-grape/grape/pull/2686): Add `Grape::Middleware::PrecomputedContentTypes` to warm content-type caches on the parent middleware instance (opt-in via `include`); short-circuit `Middleware::Base#merge_headers` when no headers were set - [@ericproulx](https://github.com/ericproulx).
+* [#2683](https://github.com/ruby-grape/grape/pull/2683): Introduce `Grape::Util::Lazy::Base` for unified lazy-type dispatch - [@ericproulx](https://github.com/ericproulx).
+* [#2685](https://github.com/ruby-grape/grape/pull/2685): Skip `run_filters` and `endpoint_run_filters.grape` instrumentation when the filter list is empty - [@ericproulx](https://github.com/ericproulx).
+* [#2684](https://github.com/ruby-grape/grape/pull/2684): Readability refactors: case/when, guard clauses, small cleanups - [@ericproulx](https://github.com/ericproulx).
+* [#2687](https://github.com/ruby-grape/grape/pull/2687): Skip backtrace capture on internal validation exceptions - [@ericproulx](https://github.com/ericproulx).
+* [#2688](https://github.com/ruby-grape/grape/pull/2688): Consolidate user-registered rescue handler lookup into `Middleware::Error#registered_rescue_handler` backed by a shared `rescue_handler_from` primitive - [@ericproulx](https://github.com/ericproulx).
+* [#2689](https://github.com/ruby-grape/grape/pull/2689): Avoid empty-hash merges on request hot paths - [@ericproulx](https://github.com/ericproulx).
+* [#2690](https://github.com/ruby-grape/grape/pull/2690): Avoid allocating an empty array on every `StackableValues#[]` miss - [@ericproulx](https://github.com/ericproulx).
+* [#2691](https://github.com/ruby-grape/grape/pull/2691): Precompute the prefix list in `Middleware::Versioner::Path` - [@ericproulx](https://github.com/ericproulx).
+* [#2692](https://github.com/ruby-grape/grape/pull/2692): Replace per-request `Proc` allocation in `Router#transaction` with a `halt?` helper - [@ericproulx](https://github.com/ericproulx).
+* [#2694](https://github.com/ruby-grape/grape/pull/2694): Split `Versioner::Base#available_media_types` into an `attr_reader` plus `build_available_media_types` - [@ericproulx](https://github.com/ericproulx).
+* [#2695](https://github.com/ruby-grape/grape/pull/2695): Lift trailing `if/else` into guard clauses - [@ericproulx](https://github.com/ericproulx).
+* [#2698](https://github.com/ruby-grape/grape/pull/2698): Collapse `DSL::RequestResponse#extract_handler` type-dispatch into a `case`/`when` - [@ericproulx](https://github.com/ericproulx).
+* [#2697](https://github.com/ruby-grape/grape/pull/2697): Extract `Grape::Util::PathNormalizer` from `Grape::Router`; `Grape::Router.normalize_path` is now a deprecated alias - [@ericproulx](https://github.com/ericproulx).
+* [#2696](https://github.com/ruby-grape/grape/pull/2696): Reduce per-request allocations on the request hot path; migrate middleware options to `attr_reader` and freeze `@options` post-init - [@ericproulx](https://github.com/ericproulx).
+* [#2693](https://github.com/ruby-grape/grape/pull/2693): Introduce `Grape::Exceptions::ErrorResponse` value object to replace the implicit-schema Hash thrown via `throw` - [@ericproulx](https://github.com/ericproulx).
+* [#2701](https://github.com/ruby-grape/grape/pull/2701): Replace `.tap` usages in `lib/` with explicit local variables - [@ericproulx](https://github.com/ericproulx).
+* [#2704](https://github.com/ruby-grape/grape/pull/2704): Add `Grape::Endpoint#logger` so the API's configured logger is reachable inside route handlers, filters, and `rescue_from` blocks without a helper - [@ericproulx](https://github.com/ericproulx).
+* [#2705](https://github.com/ruby-grape/grape/pull/2705): Add `Grape.config.warn_on_helper_overrides` (off by default) to emit a warning when a helper method masks a `Grape::Endpoint` instance method - [@ericproulx](https://github.com/ericproulx).
+* [#2706](https://github.com/ruby-grape/grape/pull/2706): Refactor `ParamsScope#validates` and `ParamsDocumentation` around a frozen `Grape::Validations::ValidationsSpec` value object; the validations hash supplied by the DSL is no longer mutated and the helper chain becomes pure - [@ericproulx](https://github.com/ericproulx).
+* [#2707](https://github.com/ruby-grape/grape/pull/2707): Tighten six guard conditions in `lib/` via De Morgan and `blank?`/`present?`/`include?` rewrites; no behaviour change - [@ericproulx](https://github.com/ericproulx).
+* [#2708](https://github.com/ruby-grape/grape/pull/2708): Tighten dynamic `define_method` in `DSL::Callbacks` and `DSL::Routing` - [@ericproulx](https://github.com/ericproulx).
+* [#2709](https://github.com/ruby-grape/grape/pull/2709): Lift trailing `if/else` into guard clauses; tighten `Util::Lazy::ValueEnumerable` - [@ericproulx](https://github.com/ericproulx).
+* [#2702](https://github.com/ruby-grape/grape/pull/2702): Add `oneof:` option for `requires`/`optional` to accept a Hash parameter matching one of several variant schemas (resolves [#2385](https://github.com/ruby-grape/grape/issues/2385)) - [@ericproulx](https://github.com/ericproulx).
+* [#2715](https://github.com/ruby-grape/grape/pull/2715): Normalize `==` / `eql?` aliasing across value-like classes - [@ericproulx](https://github.com/ericproulx).
+* [#2710](https://github.com/ruby-grape/grape/pull/2710): Tidy up `Grape::DeclaredParamsHandler` - [@ericproulx](https://github.com/ericproulx).
+* [#2712](https://github.com/ruby-grape/grape/pull/2712): Pass a `Grape::Exceptions::ErrorResponse` value object to `error_formatter#call` instead of separate kwargs - [@ericproulx](https://github.com/ericproulx).
+* [#2714](https://github.com/ruby-grape/grape/pull/2714): Drop unused `Grape::Middleware::Globals` and its `grape.request*` env constants - [@ericproulx](https://github.com/ericproulx).
+* [#2717](https://github.com/ruby-grape/grape/pull/2717): Convert `Grape::Exceptions::ErrorResponse` to a `Data` value object - [@ericproulx](https://github.com/ericproulx).
+* [#2723](https://github.com/ruby-grape/grape/pull/2723): Deprecate passing a positional options Hash to `Grape::DSL::Desc#desc`; pass options as keyword arguments. Add a grape-swagger integration spec - [@ericproulx](https://github.com/ericproulx).
+* [#2722](https://github.com/ruby-grape/grape/pull/2722): Introduce `Grape::Validations::CoerceOptions` value object for the internal coerce options - [@ericproulx](https://github.com/ericproulx).
+* [#2721](https://github.com/ruby-grape/grape/pull/2721): Use an internal `Grape::Validations::SharedOptions` value object in `Validators::Base` (public `opts` Hash contract unchanged) - [@ericproulx](https://github.com/ericproulx).
+* [#2719](https://github.com/ruby-grape/grape/pull/2719): Move content-type helpers from `Middleware::Base` into `PrecomputedContentTypes` - [@ericproulx](https://github.com/ericproulx).
+* [#2716](https://github.com/ruby-grape/grape/pull/2716): Refactor `DSL::Routing#version`: guard clause, explicit kwargs in place of `**options`, and a `Grape::DSL::VersionOptions` value object stored internally - [@ericproulx](https://github.com/ericproulx).
+* [#2720](https://github.com/ruby-grape/grape/pull/2720): Move declaration-coherence checks into `Grape::Validations::ValidationsSpec` - [@ericproulx](https://github.com/ericproulx).
+* [#2725](https://github.com/ruby-grape/grape/pull/2725): Encapsulate `Grape::Validations::Validators::Base` state behind readers; add `required?`/`allow_blank?` predicates - [@ericproulx](https://github.com/ericproulx).
+* [#2726](https://github.com/ruby-grape/grape/pull/2726): Reuse one `AttributesIterator` per validator and drop the unused `Enumerable` mixin - [@ericproulx](https://github.com/ericproulx).
+* [#2728](https://github.com/ruby-grape/grape/pull/2728): Deprecate passing a positional options Hash to `auth`/`http_basic`/`http_digest`; pass keyword arguments instead - [@ericproulx](https://github.com/ericproulx).
+* [#2733](https://github.com/ruby-grape/grape/pull/2733): Drop the dead `active_support/core_ext/hash/reverse_merge` require; call `ActiveSupport::HashWithIndifferentAccess.new(...)` directly at call sites - [@ericproulx](https://github.com/ericproulx).
+* [#2734](https://github.com/ruby-grape/grape/pull/2734): Extract `options_route_enabled` from the Endpoint options Hash into a dedicated `attr_accessor` - [@ericproulx](https://github.com/ericproulx).
+* [#2736](https://github.com/ruby-grape/grape/pull/2736): Collapse `Endpoint#run_validators` rescue branches via `ValidationErrors` flatten; `ValidationErrors#initialize` keyword renamed `errors:` → `exceptions:` - [@ericproulx](https://github.com/ericproulx).
+* [#2747](https://github.com/ruby-grape/grape/pull/2747): Drop `Enumerable` from `Grape::Exceptions::ValidationErrors` and remove its public `#each`; rewrite `#full_messages` to walk `#errors` directly - [@ericproulx](https://github.com/ericproulx).
+* [#2749](https://github.com/ruby-grape/grape/pull/2749): Middleware tidy-up — dedupe `Versioner::Base#build_available_media_types` (was emitting `application/vnd.<vendor>-<version>` once per content_type) and assorted `Formatter` cleanups (guard clauses, in-place merges, drop a no-op splat) - [@ericproulx](https://github.com/ericproulx).
+* [#2718](https://github.com/ruby-grape/grape/pull/2718): Generalize middleware options to per-class `Options` `Data` value objects (`Middleware::Error`, `::Formatter`, `::Versioner::Base`); expose them via a new `config` reader, keep `options` Hash for back-compat, deprecate `Options#[]` Hash-style access - [@ericproulx](https://github.com/ericproulx).
+* [#2746](https://github.com/ruby-grape/grape/pull/2746): Hoist `using:` / `except:` from `**opts` to explicit kwargs on `DSL::Parameters#requires` and `#optional` - [@ericproulx](https://github.com/ericproulx).
+* [#2750](https://github.com/ruby-grape/grape/pull/2750): Bump minimum required Ruby to 3.3 - [@ericproulx](https://github.com/ericproulx).
+* [#2742](https://github.com/ruby-grape/grape/pull/2742): Prune unused requires in `lib/grape.rb`; narrow `active_support/inflector` to `core_ext/string/inflections` - [@ericproulx](https://github.com/ericproulx).
+* [#2741](https://github.com/ruby-grape/grape/pull/2741): Readability pass: guard clauses and small extractions across `lib/` - [@ericproulx](https://github.com/ericproulx).
+* [#2740](https://github.com/ruby-grape/grape/pull/2740): Lazy-allocate `@api_class` and `@point_in_time_copies` on `Grape::Util::InheritableSetting` so unused settings layers don't carry an empty Hash and empty Array each - [@ericproulx](https://github.com/ericproulx).
+* [#2739](https://github.com/ruby-grape/grape/pull/2739): Lazy-allocate `@new_values` in `Grape::Util::BaseInheritable` so settings layers that only inherit never carry an empty Hash; readers in `InheritableValues`/`StackableValues` handle nil - [@ericproulx](https://github.com/ericproulx).
+* [#2737](https://github.com/ruby-grape/grape/pull/2737): `rescue_from` raises `ArgumentError` when a meta selector (`:all`, `:grape_exceptions`, `:internal_grape_exceptions`) is mixed with exception classes instead of silently dropping the classes - [@ericproulx](https://github.com/ericproulx).
+* [#2735](https://github.com/ruby-grape/grape/pull/2735): Normalize `Grape::Endpoint#options` into an immutable `Grape::Endpoint::Options` `Data` value object; Hash-style `[]` reads kept for back-compat - [@ericproulx](https://github.com/ericproulx).
+* [#2754](https://github.com/ruby-grape/grape/pull/2754): Merge routing args in place in `Router#process_route` instead of allocating a new Hash via `merge` - [@ericproulx](https://github.com/ericproulx).
+* [#2753](https://github.com/ruby-grape/grape/pull/2753): Lazy-allocate `Grape::Validations::ParamScopeTracker`'s identity-keyed hashes so validating requests that never use the index / qualifying-params trackers allocate no hash - [@ericproulx](https://github.com/ericproulx).
+* [#2752](https://github.com/ruby-grape/grape/pull/2752): Skip per-request `ActiveSupport::Notifications` payload and dispatch when no subscriber is listening, via private `instrument_<event>` guards on `Endpoint`/`Middleware::Formatter` - [@ericproulx](https://github.com/ericproulx).
+* [#2755](https://github.com/ruby-grape/grape/pull/2755): Inline `mustermann-grape` into `Grape::Router::MustermannPattern` and depend on `mustermann` directly - [@ericproulx](https://github.com/ericproulx).
+* [#2757](https://github.com/ruby-grape/grape/pull/2757): Build the `Grape::Cookies` jar only when a cookie is read or written (via a new `Grape::Request#cookies?` predicate gating response-cookie flushing), and drop the jar's now-redundant lazy-parse `Proc` - [@ericproulx](https://github.com/ericproulx).
+* [#2756](https://github.com/ruby-grape/grape/pull/2756): Tighten dependency lower bounds to their compatibility floors (`rack >= 2.2.4`, `zeitwerk >= 2.6`, `dry-configurable >= 1.0`) - [@ericproulx](https://github.com/ericproulx).
+* [#2762](https://github.com/ruby-grape/grape/pull/2762): Parse request bodies with `JSON.parse` in the stdlib JSON fallback, dropping the `create_additions: false` wrapper from #2759 (`JSON.parse` never honours `json_class`) - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2678](https://github.com/ruby-grape/grape/pull/2678): Update rubocop to 1.86.0 and autocorrect offenses - [@ericproulx](https://github.com/ericproulx).
+* [#2682](https://github.com/ruby-grape/grape/pull/2682): Fix `Style/OptionalBooleanParameter` offenses - [@ericproulx](https://github.com/ericproulx).
+* [#2699](https://github.com/ruby-grape/grape/pull/2699): Fix `Grape::Validations::Types::CustomTypeCoercer` dropping symbolized hash keys for `Array`/`Set` types; refactor the class for readability - [@ericproulx](https://github.com/ericproulx).
+* [#2758](https://github.com/ruby-grape/grape/pull/2758): Fix `VariantCollectionCoercer#to_s` to return `"Array[Type, ...]"` notation instead of a raw object string - [@bogdan](https://github.com/bogdan).
+* [#2700](https://github.com/ruby-grape/grape/pull/2700): Fix README typos, remove obsolete Ruby 2.4 / Fixnum section, and replace incorrect `requires + values + allow_blank` note with a correct one covering `optional + values` semantics (closes #2631) - [@ericproulx](https://github.com/ericproulx).
+* [#2703](https://github.com/ruby-grape/grape/pull/2703): Catch exceptions raised inside `rescue_from` blocks; new `rescue_from :internal_grape_exceptions` opt-in for unrecognised internal errors (resolves [#2482](https://github.com/ruby-grape/grape/issues/2482)) - [@ericproulx](https://github.com/ericproulx).
+* [#2706](https://github.com/ruby-grape/grape/pull/2706): Fix `optional :foo, message: 'oops'` raising `UnknownValidator` - [@ericproulx](https://github.com/ericproulx).
+* [#2751](https://github.com/ruby-grape/grape/pull/2751): Fix structured error messages leaking the raw i18n key for an undefined optional step such as `summary` (closes #2748) - [@ericproulx](https://github.com/ericproulx).
+* [#2759](https://github.com/ruby-grape/grape/pull/2759): Use `create_additions: false` in `Grape::Json.load` to prevent object instantiation via the `json_class` key when using the stdlib JSON fallback - [@dblock](https://github.com/dblock).
+* [#2765](https://github.com/ruby-grape/grape/pull/2765): Detect the `MultiXML` constant to avoid the multi_xml 0.9 `MultiXml` deprecation - [@ericproulx](https://github.com/ericproulx).
+* [#2764](https://github.com/ruby-grape/grape/pull/2764): Route `Grape::Json` through the non-deprecated `MultiJSON` API - [@ericproulx](https://github.com/ericproulx).
+
+### 3.2.1 (2026-04-16)
+
+#### Fixes
+* [#2680](https://github.com/ruby-grape/grape/pull/2680): Restore public `schema` reader on ContractScope validator - [@ericproulx](https://github.com/ericproulx).
+
+### 3.2.0 (2026-04-08)
+
+#### Features
+
+* [#2662](https://github.com/ruby-grape/grape/pull/2662): Extract `Grape::Util::Translation` for shared I18n fallback logic - [@ericproulx](https://github.com/ericproulx).
+* [#2656](https://github.com/ruby-grape/grape/pull/2656): Remove useless instance_variable_defined? checks - [@ericproulx](https://github.com/ericproulx).
+* [#2619](https://github.com/ruby-grape/grape/pull/2619): Remove TOC from README.md and danger-toc check - [@alexanderadam](https://github.com/alexanderadam).
+* [#2663](https://github.com/ruby-grape/grape/pull/2663): Refactor `ParamsScope` and `Parameters` DSL to use named kwargs - [@ericproulx](https://github.com/ericproulx).
+* [#2664](https://github.com/ruby-grape/grape/pull/2664): Drop `test-prof` dependency - [@ericproulx](https://github.com/ericproulx).
+* [#2665](https://github.com/ruby-grape/grape/pull/2665): Pass `attrs` directly to `AttributesIterator` instead of `validator` - [@ericproulx](https://github.com/ericproulx).
+* [#2657](https://github.com/ruby-grape/grape/pull/2657): Instantiate validators at definition time - [@ericproulx](https://github.com/ericproulx).
+* [#2667](https://github.com/ruby-grape/grape/pull/2667): Skip instrumentation in run_validators when no validators present - [@ericproulx](https://github.com/ericproulx).
+* [#2670](https://github.com/ruby-grape/grape/pull/2670): Added support for Rack 3.2.6 and better handling to rack exceptions - [@ericproulx](https://github.com/ericproulx).
+* [#2671](https://github.com/ruby-grape/grape/pull/2671): Use ruby 3.1 shorthand kwargs syntax - [@ericproulx](https://github.com/ericproulx).
+* [#2672](https://github.com/ruby-grape/grape/pull/2672): Minor ruby optimizations - [@ericproulx](https://github.com/ericproulx).
+* [#2675](https://github.com/ruby-grape/grape/pull/2675): Add `AGENTS.md` to please our future A.I. overlords - [@dblock](https://github.com/dblock).
+
+#### Fixes
+
+* [#2670](https://github.com/ruby-grape/grape/pull/2670): Fix `UnknownAuthStrategy` raised when custom auth strategy class inherits from `Grape::Middleware::Auth::Base` - [@dblock](https://github.com/dblock).
+* [#2655](https://github.com/ruby-grape/grape/pull/2655): Fix `before_each` method to handle `nil` parameter correctly - [@ericproulx](https://github.com/ericproulx).
+* [#2660](https://github.com/ruby-grape/grape/pull/2660): Fix thread safety: move mutable `ParamsScope` state (`index`, `params_meeting_dependency`) into a per-request `ParamScopeTracker` stored in `Fiber[]` - [@ericproulx](https://github.com/ericproulx).
+* [#2666](https://github.com/ruby-grape/grape/pull/2666): Endpoint cleanup and minor optimizations - [@ericproulx](https://github.com/ericproulx).
+* [#2676](https://github.com/ruby-grape/grape/pull/2676): Exclude ruby 3.2 for rails_edge - [@ericproulx](https://github.com/ericproulx).
+* [#2677](https://github.com/ruby-grape/grape/pull/2677): Update actions/checkout to v6 - [@ericproulx](https://github.com/ericproulx).
+
+### 3.1.0 (2026-01-25)
+
+#### Features
+
+* [#2629](https://github.com/ruby-grape/grape/pull/2629): Refactor Router Architecture - [@ericproulx](https://github.com/ericproulx).
+* [#2633](https://github.com/ruby-grape/grape/pull/2633): Refactor API::Instance and reorganize DSL modules - [@ericproulx](https://github.com/ericproulx).
+* [#2636](https://github.com/ruby-grape/grape/pull/2636): Refactor router to simplify method signatures and reduce duplication - [@ericproulx](https://github.com/ericproulx).
+* [#2640](https://github.com/ruby-grape/grape/pull/2640): Compute available_media_types once - [@ericproulx](https://github.com/ericproulx).
+* [#2637](https://github.com/ruby-grape/grape/pull/2637): Refactor declared method - [@ericproulx](https://github.com/ericproulx).
+* [#2639](https://github.com/ruby-grape/grape/pull/2639): Refactor mime_types_for - [@ericproulx](https://github.com/ericproulx).
+* [#2638](https://github.com/ruby-grape/grape/pull/2638): Remove unnecessary path string duplication - [@ericproulx](https://github.com/ericproulx).
+* [#2643](https://github.com/ruby-grape/grape/pull/2638): Remove `try` method in codebase - [@ericproulx](https://github.com/ericproulx).
+* [#2646](https://github.com/ruby-grape/grape/pull/2646): Call `valid_encoding?` before scrub - [@ericproulx](https://github.com/ericproulx).
+* [#2644](https://github.com/ruby-grape/grape/pull/2644): Clean useless/not valuable dependencies - [@ericproulx](https://github.com/ericproulx).
+* [#2649](https://github.com/ruby-grape/grape/pull/2644): Drop support Ruby 3.0 and ActiveSupport 7.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2648](https://github.com/ruby-grape/grape/pull/2648): Remove deprecated ParamsBuilders extensions - [@ericproulx](https://github.com/ericproulx).
+* [#2645](https://github.com/ruby-grape/grape/pull/2645): Endpoints are compiled when API is compiled - [@ericproulx](https://github.com/ericproulx).
+* [#2647](https://github.com/ruby-grape/grape/pull/2647): Explicit kwargs for `namespace` and `route_param` - [@ericproulx](https://github.com/ericproulx).
+* [#2651](https://github.com/ruby-grape/grape/pull/2651): Migrate Danger to use danger-pr-comment workflow - [@dblock](https://github.com/dblock).
+
+#### Fixes
+    
+* [#2633](https://github.com/ruby-grape/grape/pull/2633): Fix cascade reading - [@ericproulx](https://github.com/ericproulx).
+* [#2641](https://github.com/ruby-grape/grape/pull/2641): Restore support for `return` in endpoint blocks - [@ericproulx](https://github.com/ericproulx).
+* [#2642](https://github.com/ruby-grape/grape/pull/2642): Fix array allocation in base_route.rb - [@ericproulx](https://github.com/ericproulx).
+* Fix `before_each` method to handle `nil` parameter correctly - [@ericproulx](https://github.com/ericproulx).
+
+### 3.0.1 (2025-11-24)
+
+#### Features
+
+* [#2625](https://github.com/ruby-grape/grape/pull/2625): Update rubocop to 1.81.7 and fix style offenses - [@ericproulx](https://github.com/ericproulx).
+* [#2626](https://github.com/ruby-grape/grape/pull/2626): Add rails 8.1 to CI test matrix - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2628](https://github.com/ruby-grape/grape/pull/2628): Fix helpers inheritance - [@giorni](https://github.com/giorni).
+
+### 3.0.0 (2025-11-15)
+
+#### Features
+
+* [#2572](https://github.com/ruby-grape/grape/pull/2572): Drop support ruby 2.7 and active_support 6.1 - [@ericproulx](https://github.com/ericproulx).
+* [#2573](https://github.com/ruby-grape/grape/pull/2573): Clean up deprecated code - [@ericproulx](https://github.com/ericproulx).
+* [#2575](https://github.com/ruby-grape/grape/pull/2575): Refactor Api description class - [@ericproulx](https://github.com/ericproulx).
+* [#2577](https://github.com/ruby-grape/grape/pull/2577): Deprecate `return` in endpoint execution - [@ericproulx](https://github.com/ericproulx).
+* [#2580](https://github.com/ruby-grape/grape/pull/2580): Refactor endpoint helpers and error middleware integration - [@ericproulx](https://github.com/ericproulx).
+* [#2581](https://github.com/ruby-grape/grape/pull/2581): Delegate `to_s` in Grape::API::Instance - [@ericproulx](https://github.com/ericproulx).
+* [#2582](https://github.com/ruby-grape/grape/pull/2582): Fix leaky slash when normalizing - [@ericproulx](https://github.com/ericproulx).
+* [#2583](https://github.com/ruby-grape/grape/pull/2583): Optimize api parameter documentation and memory usage - [@ericproulx](https://github.com/ericproulx).
+* [#2589](https://github.com/ruby-grape/grape/pull/2589): Replace `send` by `__send__` in codebase - [@ericproulx](https://github.com/ericproulx).
+* [#2598](https://github.com/ruby-grape/grape/pull/2598): Refactor settings DSL to use explicit methods instead of dynamic generation - [@ericproulx](https://github.com/ericproulx).
+* [#2599](https://github.com/ruby-grape/grape/pull/2599): Simplify settings DSL get_or_set method and optimize logger implementation - [@ericproulx](https://github.com/ericproulx).
+* [#2600](https://github.com/ruby-grape/grape/pull/2600): Refactor versioner middleware: simplify base class and improve consistency - [@ericproulx](https://github.com/ericproulx).
+* [#2601](https://github.com/ruby-grape/grape/pull/2601): Refactor route_setting internal usage to use inheritable_setting.route for improved consistency and performance - [@ericproulx](https://github.com/ericproulx).
+* [#2602](https://github.com/ruby-grape/grape/pull/2602): Remove `namespace_reverse_stackable` from public DSL interface and use direct inheritable_setting access - [@ericproulx](https://github.com/ericproulx).
+* [#2603](https://github.com/ruby-grape/grape/pull/2603): Remove `namespace_stackable_with_hash` from public interface and move to internal InheritableSetting - [@ericproulx](https://github.com/ericproulx).
+* [#2604](https://github.com/ruby-grape/grape/pull/2604): Enable branch coverage  - [@ericproulx](https://github.com/ericproulx).
+* [#2605](https://github.com/ruby-grape/grape/pull/2605): Add Rack 3.2 support with new gemfile and CI integration - [@ericproulx](https://github.com/ericproulx).
+* [#2607](https://github.com/ruby-grape/grape/pull/2607): Remove namespace_stackable and namespace_inheritable from public API - [@ericproulx](https://github.com/ericproulx).
+* [#2615](https://github.com/ruby-grape/grape/pull/2615): Remove manual toc and tod danger check - [@alexanderadam](https://github.com/alexanderadam).
+* [#2612](https://github.com/ruby-grape/grape/pull/2612): Avoid multiple mount pollution - [@alexanderadam](https://github.com/alexanderadam).
+* [#2617](https://github.com/ruby-grape/grape/pull/2617): Migrate from `ActiveSupport::Configurable` to `Dry::Configurable` - [@ericproulx](https://github.com/ericproulx).
+* [#2618](https://github.com/ruby-grape/grape/pull/2618): Modernize argument delegation for Ruby 3+ compatibility - [@ericproulx](https://github.com/ericproulx).
+* [#2623](https://github.com/ruby-grape/grape/pull/2623): Refactor coercer caching to use `Grape::Util::Cache` - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2586](https://github.com/ruby-grape/grape/pull/2586): Limit helpers DSL public scope - [@ericproulx](https://github.com/ericproulx).
+* [#2588](https://github.com/ruby-grape/grape/pull/2588): Fix defaut format regression on */* - [@ericproulx](https://github.com/ericproulx).
+* [#2593](https://github.com/ruby-grape/grape/pull/2593): Fix warning message when overriding global registry key - [@ericproulx](https://github.com/ericproulx).
+* [#2594](https://github.com/ruby-grape/grape/pull/2594): Fix routes memoization - [@ericproulx](https://github.com/ericproulx).
+* [#2595](https://github.com/ruby-grape/grape/pull/2595): Keep `within_namespace` as part of our internal api - [@ericproulx](https://github.com/ericproulx).
+* [#2596](https://github.com/ruby-grape/grape/pull/2596): Remove `namespace_reverse_stackable_with_hash` from public scope - [@ericproulx](https://github.com/ericproulx).
+* [#2621](https://github.com/ruby-grape/grape/pull/2621): Update upgrading notes regarding `return` usage and simplify endpoint execution - [@ericproulx](https://github.com/ericproulx).
+* [#2622](https://github.com/ruby-grape/grape/pull/2622): Use `require_relative` instead of `$LOAD_PATH` in gemspec - [@ericproulx](https://github.com/ericproulx).
+
+### 2.4.0 (2025-06-18)
+
+#### Features
+
+* [#2532](https://github.com/ruby-grape/grape/pull/2532): Update RuboCop 1.71.2 - [@ericproulx](https://github.com/ericproulx).
+* [#2535](https://github.com/ruby-grape/grape/pull/2535): Delegate calls to inner objects - [@ericproulx](https://github.com/ericproulx).
+* [#2537](https://github.com/ruby-grape/grape/pull/2537): Use activesupport `try` pattern - [@ericproulx](https://github.com/ericproulx).
+* [#2536](https://github.com/ruby-grape/grape/pull/2536): Update normalize_path like Rails - [@ericproulx](https://github.com/ericproulx).
+* [#2540](https://github.com/ruby-grape/grape/pull/2540): Introduce params builder with symbolized short name - [@ericproulx](https://github.com/ericproulx).
+* [#2550](https://github.com/ruby-grape/grape/pull/2550): Drop ActiveSupport 6.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2549](https://github.com/ruby-grape/grape/pull/2549): Delegate cookies management to `Grape::Request` - [@ericproulx](https://github.com/ericproulx).
+* [#2554](https://github.com/ruby-grape/grape/pull/2554): Remove `Grape::Http::Headers` and `Grape::Util::Lazy::Object` - [@ericproulx](https://github.com/ericproulx).
+* [#2556](https://github.com/ruby-grape/grape/pull/2556): Remove unused `Grape::Request::DEFAULT_PARAMS_BUILDER` constant - [@eriklovmo](https://github.com/eriklovmo).
+* [#2558](https://github.com/ruby-grape/grape/pull/2558): Add Ruby's option `enable_frozen_string_literal` in CI - [@ericproulx](https://github.com/ericproulx).
+* [#2557](https://github.com/ruby-grape/grape/pull/2557): Add `lint!` - [@ericproulx](https://github.com/ericproulx).
+* [#2561](https://github.com/ruby-grape/grape/pull/2561): Optimize hash alloc for middleware's default options - [@ericproulx](https://github.com/ericproulx).
+* [#2563](https://github.com/ruby-grape/grape/pull/2563): Update `Grape::Middleware::Auth::Base` - [@ericproulx](https://github.com/ericproulx).
+* [#2571](https://github.com/ruby-grape/grape/pull/2571): Update RuboCop 1.75.8 - [@pieterocp](https://github.com/pieterocp).
+
+#### Fixes
+
+* [#2538](https://github.com/ruby-grape/grape/pull/2538): Fix validating nested json array params - [@mohammednasser-32](https://github.com/mohammednasser-32).
+* [#2543](https://github.com/ruby-grape/grape/pull/2543): Fix array allocation on mount - [@ericproulx](https://github.com/ericproulx).
+* [#2546](https://github.com/ruby-grape/grape/pull/2546): Fix middleware with keywords - [@ericproulx](https://github.com/ericproulx).
+* [#2547](https://github.com/ruby-grape/grape/pull/2547): Remove jsonapi related code - [@ericproulx](https://github.com/ericproulx).
+* [#2548](https://github.com/ruby-grape/grape/pull/2548): Formatting from header acts like versioning from header - [@ericproulx](https://github.com/ericproulx).
+* [#2552](https://github.com/ruby-grape/grape/pull/2552): Fix declared params optional array - [@ericproulx](https://github.com/ericproulx).
+* [#2553](https://github.com/ruby-grape/grape/pull/2553): Improve performance of query params parsing - [@ericproulx](https://github.com/ericproulx).
+
+### 2.3.0 (2025-02-08)
+
+#### Features
+
+* [#2497](https://github.com/ruby-grape/grape/pull/2497): Update RuboCop to 1.66.1 - [@ericproulx](https://github.com/ericproulx).
+* [#2500](https://github.com/ruby-grape/grape/pull/2500): Remove deprecated `file` method - [@ericproulx](https://github.com/ericproulx).
+* [#2501](https://github.com/ruby-grape/grape/pull/2501): Remove deprecated `except` and `proc` options in values validator - [@ericproulx](https://github.com/ericproulx).
+* [#2502](https://github.com/ruby-grape/grape/pull/2502): Remove deprecation `options` in `desc` - [@ericproulx](https://github.com/ericproulx).
+* [#2512](https://github.com/ruby-grape/grape/pull/2512): Optimize hash alloc - [@ericproulx](https://github.com/ericproulx).
+* [#2513](https://github.com/ruby-grape/grape/pull/2513): Optimize Grape::Path - [@ericproulx](https://github.com/ericproulx).
+* [#2514](https://github.com/ruby-grape/grape/pull/2514): Add rails 8.0 to CI - [@ericproulx](https://github.com/ericproulx).
+* [#2516](https://github.com/ruby-grape/grape/pull/2516): Dynamic registration for parsers, formatters, versioners - [@ericproulx](https://github.com/ericproulx).
+* [#2518](https://github.com/ruby-grape/grape/pull/2518): Add ruby 3.4 to CI - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2504](https://github.com/ruby-grape/grape/pull/2504): Fix leaky modules in specs - [@ericproulx](https://github.com/ericproulx).
+* [#2506](https://github.com/ruby-grape/grape/pull/2506): Fix fetch_formatter api_format - [@ericproulx](https://github.com/ericproulx).
+* [#2507](https://github.com/ruby-grape/grape/pull/2507): Fix type: Set with values - [@nikolai-b](https://github.com/nikolai-b).
+* [#2510](https://github.com/ruby-grape/grape/pull/2510): Fix ContractScope's validator inheritance - [@ericproulx](https://github.com/ericproulx).
+* [#2521](https://github.com/ruby-grape/grape/pull/2521): Fixed typo in README - [@datpmt](https://github.com/datpmt).
+* [#2525](https://github.com/ruby-grape/grape/pull/2525): Require logger before active_support - [@ericproulx](https://github.com/ericproulx).
+* [#2524](https://github.com/ruby-grape/grape/pull/2524): Fix validators bad encoding - [@ericproulx](https://github.com/ericproulx).
+* [#2530](https://github.com/ruby-grape/grape/pull/2530): Fix endpoint's status when rescue_from without a block - [@ericproulx](https://github.com/ericproulx).
+* [#2529](https://github.com/ruby-grape/grape/pull/2529): Fix missing settings on mounted routes (when settings are identical) - [@Haerezis](https://github.com/Haerezis).
+
+### 2.2.0 (2024-09-14)
+
+#### Features
+
+* [#2475](https://github.com/ruby-grape/grape/pull/2475): Remove Grape::Util::Registrable - [@ericproulx](https://github.com/ericproulx).
+* [#2484](https://github.com/ruby-grape/grape/pull/2484): Refactor versioner middlewares - [@ericproulx](https://github.com/ericproulx).
+* [#2489](https://github.com/ruby-grape/grape/pull/2489): Add Rails 7.2 in CI workflow - [@ericproulx](https://github.com/ericproulx).
+* [#2493](https://github.com/ruby-grape/grape/pull/2493): MFA required when releasing - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2471](https://github.com/ruby-grape/grape/pull/2471): Fix absence of original_exception and/or backtrace even if passed in error! - [@numbata](https://github.com/numbata).
+* [#2478](https://github.com/ruby-grape/grape/pull/2478): Fix rescue_from with invalid response - [@ericproulx](https://github.com/ericproulx).
+* [#2480](https://github.com/ruby-grape/grape/pull/2480): Fix rescue_from ValidationErrors exception - [@numbata](https://github.com/numbata).
+* [#2464](https://github.com/ruby-grape/grape/pull/2464): The `length` validator only takes effect for parameters with types that support `#length` method - [@OuYangJinTing](https://github.com/OuYangJinTing).
+* [#2485](https://github.com/ruby-grape/grape/pull/2485): Add `is:` param to length validator - [@dakad](https://github.com/dakad).
+* [#2492](https://github.com/ruby-grape/grape/pull/2492): Fix `Grape::Endpoint#inspect` method - [@ericproulx](https://github.com/ericproulx).
+* [#2496](https://github.com/ruby-grape/grape/pull/2496): Reduce object allocation when compiling - [@ericproulx](https://github.com/ericproulx).
+
+### 2.1.3 (2024-07-13)
+
+#### Fixes
+
+* [#2467](https://github.com/ruby-grape/grape/pull/2467): Fix repo coverage - [@ericproulx](https://github.com/ericproulx).
+* [#2468](https://github.com/ruby-grape/grape/pull/2468): Align `error!` method signatures across different places - [@numbata](https://github.com/numbata).
+* [#2469](https://github.com/ruby-grape/grape/pull/2469): Fix full path building for lateral scopes - [@numbata](https://github.com/numbata).
+
+### 2.1.2 (2024-06-28)
+
+#### Fixes
+
+* [#2459](https://github.com/ruby-grape/grape/pull/2459): Autocorrect cops - [@ericproulx](https://github.com/ericproulx).
+* [#3458](https://github.com/ruby-grape/grape/pull/2458): Remove unused Grape::Util::Accept::Header - [@ericproulx](https://github.com/ericproulx).
+* [#2463](https://github.com/ruby-grape/grape/pull/2463): Fix error message indices - [@ericproulx](https://github.com/ericproulx).
+
+### 2.1.1 (2024-06-22)
+
+#### Features
+
+* [#2450](https://github.com/ruby-grape/grape/pull/2450): Update RuboCop to 1.64.1 - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2453](https://github.com/ruby-grape/grape/pull/2453): Fix context in rescue_from - [@ericproulx](https://github.com/ericproulx).
+* [#2455](https://github.com/ruby-grape/grape/pull/2455): Fix default response headers to work with Rack 3 - [@ericproulx](https://github.com/ericproulx).
+
+### 2.1.0 (2024/06/15)
+
+#### Features
+
+* [#2432](https://github.com/ruby-grape/grape/pull/2432): Deep merge for group parameter attributes - [@numbata](https://github.com/numbata).
+* [#2419](https://github.com/ruby-grape/grape/pull/2419): Add the `contract` DSL - [@dgutov](https://github.com/dgutov).
+* [#2371](https://github.com/ruby-grape/grape/pull/2371): Use a param value as the `default` value of other param - [@jcagarcia](https://github.com/jcagarcia).
+* [#2377](https://github.com/ruby-grape/grape/pull/2377): Allow to use instance variables values inside `rescue_from` - [@jcagarcia](https://github.com/jcagarcia).
+* [#2379](https://github.com/ruby-grape/grape/pull/2379): Take into account the `route_param` type in `recognize_path` - [@jcagarcia](https://github.com/jcagarcia).
+* [#2383](https://github.com/ruby-grape/grape/pull/2383): Use regex block instead of if - [@ericproulx](https://github.com/ericproulx).
+* [#2384](https://github.com/ruby-grape/grape/pull/2384): Allow to use `before/after/rescue_from` methods in any order when using `mount` - [@jcagarcia](https://github.com/jcagarcia).
+* [#2390](https://github.com/ruby-grape/grape/pull/2390): Drop support for Ruby 2.6 and Rails 5 - [@ericproulx](https://github.com/ericproulx).
+* [#2393](https://github.com/ruby-grape/grape/pull/2393): Optimize AttributeTranslator - [@ericproulx](https://github.com/ericproulx).
+* [#2395](https://github.com/ruby-grape/grape/pull/2395): Set `max-age` to 0 when `cookies.delete` - [@ericproulx](https://github.com/ericproulx).
+* [#2397](https://github.com/ruby-grape/grape/pull/2397): Add support for ruby 3.3 - [@ericproulx](https://github.com/ericproulx).
+* [#2399](https://github.com/ruby-grape/grape/pull/2399): Update `rubocop` to 1.59.0, `rubocop-performance` to 1.20.1 and `rubocop-rspec` to 2.25.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2402](https://github.com/ruby-grape/grape/pull/2402): Grape::Deprecations will be raised when running specs  - [@ericproulx](https://github.com/ericproulx).
+* [#2406](https://github.com/ruby-grape/grape/pull/2406): Remove mime-types dependency in specs - [@ericproulx](https://github.com/ericproulx).
+* [#2408](https://github.com/ruby-grape/grape/pull/2408): Fix params method redefined warnings - [@ericproulx](https://github.com/ericproulx).
+* [#2410](https://github.com/ruby-grape/grape/pull/2410): Gem deprecations will raise a DeprecationWarning in specs - [@ericproulx](https://github.com/ericproulx).
+* [#2389](https://github.com/ruby-grape/grape/pull/2389): Remove rack-accept dependency - [@ericproulx](https://github.com/ericproulx).
+* [#2426](https://github.com/ruby-grape/grape/pull/2426): Drop support for rack 1.x series - [@ericproulx](https://github.com/ericproulx).
+* [#2427](https://github.com/ruby-grape/grape/pull/2427): Use `rack-contrib` jsonp instead of rack-jsonp - [@ericproulx](https://github.com/ericproulx).
+* [#2363](https://github.com/ruby-grape/grape/pull/2363): Replace autoload by zeitwerk - [@ericproulx](https://github.com/ericproulx).
+* [#2425](https://github.com/ruby-grape/grape/pull/2425): Replace `{}` with `Rack::Header` or `Rack::Utils::HeaderHash` - [@dhruvCW](https://github.com/dhruvCW).
+* [#2430](https://github.com/ruby-grape/grape/pull/2430): Isolate extensions within specific gemfile - [@ericproulx](https://github.com/ericproulx).
+* [#2431](https://github.com/ruby-grape/grape/pull/2431): Drop appraisals in favor of eval_gemfile - [@ericproulx](https://github.com/ericproulx).
+* [#2435](https://github.com/ruby-grape/grape/pull/2435): Use rack constants - [@ericproulx](https://github.com/ericproulx).
+* [#2436](https://github.com/ruby-grape/grape/pull/2436): Update coverallsapp github-action - [@ericproulx](https://github.com/ericproulx).
+* [#2434](https://github.com/ruby-grape/grape/pull/2434): Implement nested `with` support in parameter dsl - [@numbata](https://github.com/numbata).
+* [#2438](https://github.com/ruby-grape/grape/pull/2438): Fix some Rack::Lint - [@ericproulx](https://github.com/ericproulx).
+* [#2437](https://github.com/ruby-grape/grape/pull/2437): Add length validator - [@dhruvCW](https://github.com/dhruvCW).
+* [#2445](https://github.com/ruby-grape/grape/pull/2445): Remove builder as a dependency - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2375](https://github.com/ruby-grape/grape/pull/2375): Fix setter methods for `Grape::Router::AttributeTranslator` - [@Jell](https://github.com/Jell).
+* [#2370](https://github.com/ruby-grape/grape/pull/2370): Remove route_xyz method_missing deprecation - [@ericproulx](https://github.com/ericproulx).
+* [#2372](https://github.com/ruby-grape/grape/pull/2372): Fix `declared` method for hash params with overlapping names - [@jcagarcia](https://github.com/jcagarcia).
+* [#2373](https://github.com/ruby-grape/grape/pull/2373): Fix markdown files for following 1-line format - [@jcagarcia](https://github.com/jcagarcia).
+* [#2382](https://github.com/ruby-grape/grape/pull/2382): Fix values validator for params wrapped in `with` block - [@numbata](https://github.com/numbata).
+* [#2387](https://github.com/ruby-grape/grape/pull/2387): Fix rubygems version within workflows - [@ericproulx](https://github.com/ericproulx).
+* [#2405](https://github.com/ruby-grape/grape/pull/2405): Fix edge workflow - [@ericproulx](https://github.com/ericproulx).
+* [#2414](https://github.com/ruby-grape/grape/pull/2414): Fix Rack::Lint missing content-type - [@ericproulx](https://github.com/ericproulx).
+* [#2378](https://github.com/ruby-grape/grape/pull/2378): Do not overwrite `route_param` with a regular one if they share same name - [@arg](https://github.com/arg).
+* [#2444](https://github.com/ruby-grape/grape/pull/2444): Replace method_missing in endpoint - [@ericproulx](https://github.com/ericproulx).
+* [#2441](https://github.com/ruby-grape/grape/pull/2441): Optimize memory alloc and retained - [@ericproulx](https://github.com/ericproulx).
+* [#2449](https://github.com/ruby-grape/grape/pull/2449): Rack 3.1 fixes - [@ericproulx](https://github.com/ericproulx).
+
+### 2.0.0 (2023/11/11)
+
+#### Features
+
+* [#2353](https://github.com/ruby-grape/grape/pull/2353): Added Rails 7.1 support - [@ericproulx](https://github.com/ericproulx).
+* [#2355](https://github.com/ruby-grape/grape/pull/2355): Set response headers based on Rack version - [@schinery](https://github.com/schinery).
+* [#2360](https://github.com/ruby-grape/grape/pull/2360): Reduce gem size by removing specs - [@ericproulx](https://github.com/ericproulx).
+* [#2361](https://github.com/ruby-grape/grape/pull/2361): Remove `Rack::Auth::Digest` - [@ninoseki](https://github.com/ninoseki).
+
+#### Fixes
+
+* [#2364](https://github.com/ruby-grape/grape/pull/2364): Add missing requires - [@ericproulx](https://github.com/ericproulx).
+* [#2366](https://github.com/ruby-grape/grape/pull/2366): Default quality to 1.0 in the `Accept` header when omitted - [@hiddewie](https://github.com/hiddewie).
+* [#2368](https://github.com/ruby-grape/grape/pull/2368): Stripping the internals of `Grape::Endpoint` when `NoMethodError` is raised - [@jcagarcia](https://github.com/jcagarcia).
+
+### 1.8.0 (2023/08/30)
+
+#### Features
+
+* [#2326](https://github.com/ruby-grape/grape/pull/2326): Use ActiveSupport extensions - [@ericproulx](https://github.com/ericproulx).
+* [#2327](https://github.com/ruby-grape/grape/pull/2327): Use ActiveSupport deprecation - [@ericproulx](https://github.com/ericproulx).
+* [#2330](https://github.com/ruby-grape/grape/pull/2330): Use ActiveSupport inflector - [@ericproulx](https://github.com/ericproulx).
+* [#2331](https://github.com/ruby-grape/grape/pull/2331): Memory optimization when running validators - [@ericproulx](https://github.com/ericproulx).
+* [#2332](https://github.com/ruby-grape/grape/pull/2332): Use ActiveSupport configurable - [@ericproulx](https://github.com/ericproulx).
+* [#2333](https://github.com/ruby-grape/grape/pull/2333): Use custom messages in parameter validation with arity 1 - [@thedevjoao](https://github.com/TheDevJoao).
+* [#2341](https://github.com/ruby-grape/grape/pull/2341): Stop yielding skip value - [@ericproulx](https://github.com/ericproulx).
+* [#2342](https://github.com/ruby-grape/grape/pull/2342): Allow specifying a handler for grape_exceptions - [@mscrivo](https://github.com/mscrivo).
+* [#2338](https://github.com/ruby-grape/grape/pull/2338): Fix unknown validator when using requires/optional with entity - [@mscrivo](https://github.com/mscrivo).
+
+#### Fixes
+
+* [#2339](https://github.com/ruby-grape/grape/pull/2339): Documentation and specs for remountable configuration in params - [@myxoh](https://github.com/myxoh).
+* [#2328](https://github.com/ruby-grape/grape/pull/2328): Don't cache Class.instance_methods - [@byroot](https://github.com/byroot).
+* [#2337](https://github.com/ruby-grape/grape/pull/2337): Fix: allow custom validators that do not end with _validator - [@ericproulx](https://github.com/ericproulx).
+* [#2346](https://github.com/ruby-grape/grape/pull/2346): Adjust test expectations to conform to rack 3 - [@kbarrette](https://github.com/kbarrette).
+
+## 1.7.1 (2023/05/14)
+
+#### Features
+
+* [#2288](https://github.com/ruby-grape/grape/pull/2288): Dropped support for Ruby 2.5 - [@ericproulx](https://github.com/ericproulx).
+* [#2288](https://github.com/ruby-grape/grape/pull/2288): Updated rubocop to 1.41.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2296](https://github.com/ruby-grape/grape/pull/2296): Fix cops and enables some - [@ericproulx](https://github.com/ericproulx).
+* [#2302](https://github.com/ruby-grape/grape/pull/2302): Rack < 3 and update rack-test - [@ericproulx](https://github.com/ericproulx).
+* [#2303](https://github.com/ruby-grape/grape/pull/2302): Rack >= 1.3.0 - [@ericproulx](https://github.com/ericproulx).
+* [#2301](https://github.com/ruby-grape/grape/pull/2301): Revisit GH workflows - [@ericproulx](https://github.com/ericproulx).
+* [#2311](https://github.com/ruby-grape/grape/pull/2311): Fix tests by pinning rack-test to < 2.1 - [@duffn](https://github.com/duffn).
+* [#2310](https://github.com/ruby-grape/grape/pull/2310): Fix YARD docs markdown rendering - [@duffn](https://github.com/duffn).
+* [#2317](https://github.com/ruby-grape/grape/pull/2317): Remove maruku and rubocop-ast as direct development/testing dependencies - [@ericproulx](https://github.com/ericproulx).
+* [#2292](https://github.com/ruby-grape/grape/pull/2292): Introduce Docker to local development - [@ericproulx](https://github.com/ericproulx).
+* [#2325](https://github.com/ruby-grape/grape/pull/2325): Change edge test workflows only run on demand - [@dblock](https://github.com/dblock).
+* [#2324](https://github.com/ruby-grape/grape/pull/2324): Expose default in the description dsl - [@dhruvCW](https://github.com/dhruvCW).
+
+#### Fixes
+
+* [#2299](https://github.com/ruby-grape/grape/pull/2299): Fix, do not use kwargs for empty args  - [@dm1try](https://github.com/dm1try).
+* [#2307](https://github.com/ruby-grape/grape/pull/2307): Fixed autoloading of InvalidValue - [@fixlr](https://github.com/fixlr).
+* [#2315](https://github.com/ruby-grape/grape/pull/2315): Update rspec - [@ericproulx](https://github.com/ericproulx).
+* [#2319](https://github.com/ruby-grape/grape/pull/2319): Update rubocop - [@ericproulx](https://github.com/ericproulx).
+* [#2323](https://github.com/ruby-grape/grape/pull/2323): Fix using endless ranges for values parameter - [@dhruvCW](https://github.com/dhruvCW).
+
+### 1.7.0 (2022/12/20)
+
+#### Features
+
+* [#2233](https://github.com/ruby-grape/grape/pull/2233): Added `do_not_document!` for disabling documentation to internal APIs - [@dnesteryuk](https://github.com/dnesteryuk).
+* [#2235](https://github.com/ruby-grape/grape/pull/2235): Add support for Ruby 3.1 - [@petergoldstein](https://github.com/petergoldstein).
+* [#2248](https://github.com/ruby-grape/grape/pull/2248): Upgraded to rspec 3.11.0 - [@dblock](https://github.com/dblock).
+* [#2249](https://github.com/ruby-grape/grape/pull/2249): Split CI matrix, extract edge - [@dblock](https://github.com/dblock).
+* [#2249](https://github.com/ruby-grape/grape/pull/2251): Upgraded to RuboCop 1.25.1 - [@dblock](https://github.com/dblock).
+* [#2271](https://github.com/ruby-grape/grape/pull/2271): Fixed validation regression on Numeric type introduced in 1.3 - [@vasfed](https://github.com/Vasfed).
+* [#2267](https://github.com/ruby-grape/grape/pull/2267): Standardized English error messages - [@dblock](https://github.com/dblock).
+* [#2272](https://github.com/ruby-grape/grape/pull/2272): Added error on param init when provided type does not have `[]` coercion method, previously validation silently failed for any value - [@vasfed](https://github.com/Vasfed).
+* [#2274](https://github.com/ruby-grape/grape/pull/2274): Error middleware support using rack util's symbols as status - [@dhruvCW](https://github.com/dhruvCW).
+* [#2276](https://github.com/ruby-grape/grape/pull/2276): Fix exception super - [@ericproulx](https://github.com/ericproulx).
+* [#2285](https://github.com/ruby-grape/grape/pull/2285), [#2287](https://github.com/ruby-grape/grape/pull/2287): Added :evaluate_given to declared(params) - [@zysend](https://github.com/zysend).
+
+#### Fixes
+
+* [#2263](https://github.com/ruby-grape/grape/pull/2263): Explicitly require `bigdecimal` and `date` - [@dblock](https://github.com/dblock).
+* [#2222](https://github.com/ruby-grape/grape/pull/2222): Autoload types and validators - [@ericproulx](https://github.com/ericproulx).
+* [#2232](https://github.com/ruby-grape/grape/pull/2232): Fix kwargs support in shared params definition - [@dm1try](https://github.com/dm1try).
+* [#2229](https://github.com/ruby-grape/grape/pull/2229): Do not collect params in route settings - [@dnesteryuk](https://github.com/dnesteryuk).
+* [#2234](https://github.com/ruby-grape/grape/pull/2234): Remove non-UTF8 characters from format before generating JSON error - [@bschmeck](https://github.com/bschmeck).
+* [#2227](https://github.com/ruby-grape/grape/pull/2222): Rename `MissingGroupType` and `UnsupportedGroupType` exceptions - [@ericproulx](https://github.com/ericproulx).
+* [#2244](https://github.com/ruby-grape/grape/pull/2244): Fix a breaking change in `Grape::Validations` provided in 1.6.1 - [@dm1try](https://github.com/dm1try).
+* [#2250](https://github.com/ruby-grape/grape/pull/2250): Add deprecation warning for `UnsupportedGroupTypeError` and `MissingGroupTypeError` - [@ericproulx](https://github.com/ericproulx).
+* [#2256](https://github.com/ruby-grape/grape/pull/2256): Raise `Grape::Exceptions::MultipartPartLimitError` from Rack when too many files are uploaded - [@bschmeck](https://github.com/bschmeck).
+* [#2266](https://github.com/ruby-grape/grape/pull/2266): Fix code coverage - [@duffn](https://github.com/duffn).
+* [#2284](https://github.com/ruby-grape/grape/pull/2284): Fix an unexpected backtick - [@zysend](https://github.com/zysend).
+
+### 1.6.2 (2021/12/30)
+
+#### Fixes
+
+* [#2219](https://github.com/ruby-grape/grape/pull/2219): Revert the changes for autoloading provided in 1.6.1 - [@dm1try](https://github.com/dm1try).
+
+### 1.6.1 (2021/12/28)
+
+#### Features
+
+* [#2196](https://github.com/ruby-grape/grape/pull/2196): Add support for `passwords_hashed` param for `digest_auth` - [@lHydra](https://github.com/lhydra).
+* [#2208](https://github.com/ruby-grape/grape/pull/2208): Added Rails 7 support - [@ericproulx](https://github.com/ericproulx).
+
+#### Fixes
+
+* [#2206](https://github.com/ruby-grape/grape/pull/2206): Require main active_support lib before any of its extension definitions - [@annih](https://github.com/Annih).
 * [#2193](https://github.com/ruby-grape/grape/pull/2193): Fixed the broken ruby-head NoMethodError spec - [@Jack12816](https://github.com/Jack12816).
 * [#2192](https://github.com/ruby-grape/grape/pull/2192): Memoize the result of Grape::Middleware::Base#response - [@Jack12816](https://github.com/Jack12816).
-* Your contribution here.
+* [#2200](https://github.com/ruby-grape/grape/pull/2200): Add validators module to all validators - [@ericproulx](https://github.com/ericproulx).
+* [#2202](https://github.com/ruby-grape/grape/pull/2202): Fix random mock spec error - [@ericproulx](https://github.com/ericproulx).
+* [#2203](https://github.com/ruby-grape/grape/pull/2203): Add rubocop-rspec - [@ericproulx](https://github.com/ericproulx).
+* [#2207](https://github.com/ruby-grape/grape/pull/2207): Autoload Validations/Validators - [@ericproulx](https://github.com/ericproulx).
+* [#2209](https://github.com/ruby-grape/grape/pull/2209): Autoload Validations/Types - [@ericproulx](https://github.com/ericproulx).
 
 ### 1.6.0 (2021/10/04)
 

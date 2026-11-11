@@ -1,178 +1,393 @@
 # frozen_string_literal: true
 
-require 'grape/middleware/base'
-
 module Grape
   module Middleware
     class Formatter < Base
-      CHUNKED = 'chunked'
+      include PrecomputedContentTypes
 
-      def default_options
-        {
-          default_format: :txt,
-          formatters: {},
-          parsers: {}
-        }
-      end
-
-      def before
-        negotiate_content_type
-        read_body_input
-      end
-
-      def after
-        return unless @app_response
-
-        status, headers, bodies = *@app_response
-
-        if Rack::Utils::STATUS_WITH_NO_ENTITY_BODY.include?(status)
-          @app_response
-        else
-          build_formatted_response(status, headers, bodies)
+      Options = Data.define(:content_types, :default_format, :format, :formatters, :parsers) do
+        def initialize(content_types: nil, default_format: :txt, format: nil, formatters: nil, parsers: nil)
+          super
         end
       end
+
+      ALL_MEDIA_TYPES = '*/*'
+
+      # The query param that names the format. See #format_from_query.
+      FORMAT_PARAM = 'format'
+
+      # @api private
+      # The format an Accept header asks for out of +mime_types+, or nil.
+      # Callers scrub the header first.
+      #
+      # Media types are case-insensitive (RFC 9110 §8.3.1) but the registered
+      # ones are spelled in lower case and Rack matches them literally, so an
+      # `Accept: TEXT/PLAIN` found nothing and fell through to the default
+      # format — the client quietly got something other than what it asked for.
+      def self.format_for_accept(accept_header, mime_types)
+        return if accept_header.blank? || accept_header == ALL_MEDIA_TYPES
+
+        media_type = Rack::Utils.best_q_match(accept_header.downcase, mime_types.keys)
+        mime_types[media_type] if media_type
+      end
+
+      # The Accept header an HTTP client sends with every request unless it
+      # is told otherwise, for the clients that send a list: axios and
+      # Angular's HttpClient, jQuery asked for JSON, and HTTPie. Matching a
+      # list against the registered media types costs more than the rest of
+      # a small request does.
+      COMMON_ACCEPT_HEADERS = [
+        'application/json, text/plain, */*',
+        'application/json, text/javascript, */*; q=0.01',
+        'application/json, */*;q=0.5'
+      ].freeze
+
+      # +format_for_accept+ answers from the header and +mime_types+ alone. A
+      # client that names the format it wants sends one of those media types as
+      # it is registered (+application/json+), and most others send +*/*+,
+      # nothing or one of COMMON_ACCEPT_HEADERS, so those answers are worked
+      # out once instead of re-running Rack's q-value match on every request.
+      # Any other header misses and is negotiated as before; a request never
+      # adds a key, so a client cannot grow a table.
+      #
+      # Shared per +mime_types+, which Grape::ContentTypes already shares per
+      # content-type registry: every endpoint builds its own formatter. Keyed
+      # by identity: two APIs declaring the same media types in another order
+      # have tables that are equal as Hashes, and a header naming several
+      # media types is answered by the one declared first.
+      class FormatForAcceptCache < Grape::Util::Cache
+        def initialize
+          super
+          @cache = Hash.new do |h, mime_types|
+            h[mime_types] = [*mime_types.keys, *COMMON_ACCEPT_HEADERS, ALL_MEDIA_TYPES, nil].to_h do |accept|
+              [accept, Formatter.format_for_accept(accept, mime_types)]
+            end.freeze
+          end.compare_by_identity
+        end
+      end
+
+      # The request methods that can carry a body worth parsing. See
+      # {#body_given?}, which tests the env against this before anything asks
+      # for a Rack::Request. QUERY is here because its content *is* the query
+      # (RFC 10008, Section 2), not an optional payload.
+      BODY_CARRYING_METHODS = [Rack::POST, Rack::PUT, Rack::PATCH, Rack::DELETE, Grape::QUERY].freeze
+
+      # The media types whose bodies Rack parses itself once the params are
+      # asked for, so the formatter leaves them alone.
+      #
+      # Tested against the media type the formatter parses anyway, rather than
+      # through Rack's +form_data?+ and +parseable_data?+, which parse
+      # CONTENT_TYPE again each. It is the same answer: +form_data?+ also holds
+      # for a POST with no media type, but Rack only finds none when
+      # CONTENT_TYPE is missing or empty, and a body like that was never left
+      # to Rack.
+      RACK_PARSED_MEDIA_TYPES = (Rack::Request::FORM_DATA_MEDIA_TYPES + Rack::Request::PARSEABLE_DATA_MEDIA_TYPES).freeze
+
+      # Read off ivars rather than delegated into +config+ on every request:
+      # +negotiate_content_type+ asks for +format+ and +default_format+ per
+      # request and +fetch_formatter+ for +formatters+, and each delegator cost
+      # a Forwardable frame plus a Data reader for a value that was frozen when
+      # the middleware was built.
+      attr_reader :default_format, :format, :formatters, :parsers
+
+      # The formatter is the only middleware that maps an incoming media type
+      # back to a format, so it warms +mime_types+ itself rather than making
+      # every content-type-aware middleware build a table none of them read.
+      def initialize(app, **options)
+        super
+        @default_format = config.default_format
+        @format = config.format
+        @formatters = config.formatters
+        @parsers = config.parsers
+        mime_types
+        # Only an API that pins no format negotiates one from the Accept header.
+        @format_for_accept = FormatForAcceptCache[mime_types] unless format
+      end
+
+      # Base#call copies the middleware per request so #before and #after can
+      # keep the env and the app's response in ivars. The formatter keeps
+      # neither: it passes the env along and answers from the one instance the
+      # stack built.
+      def call(env)
+        call!(env).to_a
+      end
+
+      def call!(env)
+        negotiated = negotiate_content_type(env)
+        read_body_input(env)
+        response = @app.call(env)
+        reporting_after_errors { format_response(env, response, negotiated) } || response
+      end
+
+      # Base's per-request readers look for the request in ivars that only a
+      # per-request copy sets, so the one instance the formatter answers from
+      # has none to give: +env+ is nil, +response+ raises, and +rack_request+
+      # would memoize a request on the instance every request shares.
+      private :env, :context, :rack_request, :query_params, :response
 
       private
 
-      def build_formatted_response(status, headers, bodies)
-        headers = ensure_content_type(headers)
+      def format_response(env, response, negotiated)
+        return unless response
 
-        if bodies.is_a?(Grape::ServeStream::StreamResponse)
-          Grape::ServeStream::SendfileResponse.new([], status, headers) do |resp|
-            resp.body = bodies.stream
-          end
-        else
-          # Allow content-type to be explicitly overwritten
-          formatter = fetch_formatter(headers, options)
-          bodymap = ActiveSupport::Notifications.instrument('format_response.grape', formatter: formatter, env: env) do
-            bodies.collect { |body| formatter.call(body, env) }
-          end
-          Rack::Response.new(bodymap, status, headers)
-        end
-      rescue Grape::Exceptions::InvalidFormatter => e
-        throw :error, status: 500, message: e.message, backtrace: e.backtrace, original_exception: e
+        status, headers, bodies = response
+
+        return [status, headers, []] if Rack::Utils::STATUS_WITH_NO_ENTITY_BODY.include?(status)
+
+        build_formatted_response(env, status, headers, bodies, negotiated)
       end
 
-      def fetch_formatter(headers, options)
-        api_format = mime_types[headers[Grape::Http::Headers::CONTENT_TYPE]] || env[Grape::Env::API_FORMAT]
-        Grape::Formatter.formatter_for(api_format, **options)
+      def build_formatted_response(env, status, headers, bodies, negotiated)
+        content_type_given = headers.key?(Rack::CONTENT_TYPE)
+        ensure_content_type!(env, headers)
+        return stream_response(status, headers, bodies) if bodies.is_a?(Grape::ServeStream::StreamResponse)
+
+        bodymap = format_bodies(env, headers, bodies)
+        # A formatter that renders a body only as Rack reads it (see
+        # Grape::Formatter::Jsonl) hands back a stream, served as +stream+'s is.
+        return stream_response(status, headers, bodymap.first) if bodymap.first.is_a?(Grape::ServeStream::StreamResponse)
+
+        # A bare Rack tuple rather than a Rack::Response: +headers+ is already
+        # a Rack::Headers, so wrapping only re-normalizes the same keys into a
+        # second Headers hash that +Middleware::Base#call+ unwraps again with
+        # +to_a+ on the way out.
+        # The 204/304 bodies Rack::Response#finish would blank are returned
+        # by #format_response, before this point.
+        [status, headers, bodymap]
+      rescue Grape::Exceptions::InvalidFormatter => e
+        fallback = format_as_default(env, status, headers, bodies) if falls_back?(env, negotiated, content_type_given)
+        return fallback if fallback
+
+        throw :error, Grape::Exceptions::ErrorResponse.new(status: 500, message: e.message, backtrace: e.backtrace, original_exception: e)
+      end
+
+      def format_bodies(env, headers, bodies)
+        # Picked by env['api.format']; the Content-Type header only counts when that is unset
+        formatter = fetch_formatter(env, headers)
+        instrument_format_response(env, formatter) do
+          bodies.map { |body| formatter.call(body, env) }
+        end
+      end
+
+      def stream_response(status, headers, bodies)
+        Grape::ServeStream::SendfileResponse.new([], status, headers) do |resp|
+          resp.body = bodies.stream
+        end
+      end
+
+      # A format the client negotiated -- by its Accept header, the path's
+      # extension or +?format=+ -- that cannot render the body answers in the
+      # default format rather than 500. On an API that pins no format, a
+      # browser's Accept header and axios's both negotiate XML, which cannot
+      # render a String. The fallback applies only while the format is the
+      # client's alone: when the API pins one, or the endpoint set a
+      # Content-Type or another format itself, a body that does not fit is the
+      # endpoint's error and still answers 500.
+      def falls_back?(env, negotiated, content_type_given)
+        format.nil? && !content_type_given && env[Grape::Env::API_FORMAT] == negotiated
+      end
+
+      # Nil when the default format cannot render the body either.
+      def format_as_default(env, status, headers, bodies)
+        formatter = Grape::Formatter.formatter_for(default_format, formatters)
+        bodymap = bodies.map { |body| formatter.call(body, env) }
+        env[Grape::Env::API_FORMAT] = default_format.to_sym
+        headers.delete(Rack::CONTENT_TYPE)
+        ensure_content_type!(env, headers)
+        [status, headers, bodymap]
+      rescue Grape::Exceptions::InvalidFormatter
+        nil
+      end
+
+      # Guards on +listening?+ so that with no subscriber the payload Hash and
+      # notification machinery are skipped and the block runs directly (no added
+      # allocations); the block is forwarded anonymously.
+      def instrument_format_response(env, formatter, &)
+        return yield unless ActiveSupport::Notifications.notifier.listening?('format_response.grape')
+
+        ActiveSupport::Notifications.instrument('format_response.grape', formatter:, env:, &)
+      end
+
+      def fetch_formatter(env, headers)
+        api_format = env.fetch(Grape::Env::API_FORMAT) { mime_types[headers[Rack::CONTENT_TYPE]] }
+        Grape::Formatter.formatter_for(api_format, formatters)
       end
 
       # Set the content type header for the API format if it is not already present.
       #
-      # @param headers [Hash]
-      # @return [Hash]
-      def ensure_content_type(headers)
-        if headers[Grape::Http::Headers::CONTENT_TYPE]
-          headers
-        else
-          headers.merge(Grape::Http::Headers::CONTENT_TYPE => content_type_for(env[Grape::Env::API_FORMAT]))
-        end
+      # Written into +headers+ rather than returned as a copy, hence the +!+:
+      # this runs on every response, and copying the hash costs an allocation
+      # per request for a header the caller is about to send anyway.
+      #
+      # A format with no media type at all (see #media_type_for) leaves the
+      # header out: Rack forbids a nil header value.
+      #
+      # @param headers [Hash] the response headers, mutated in place
+      # @return [void]
+      def ensure_content_type!(env, headers)
+        return if headers[Rack::CONTENT_TYPE]
+
+        content_type = media_type_for(env[Grape::Env::API_FORMAT])
+        headers[Rack::CONTENT_TYPE] = content_type if content_type
       end
 
-      def request
-        @request ||= Rack::Request.new(env)
-      end
+      def read_body_input(env)
+        return unless body_given?(env)
 
-      # store read input in env['api.request.input']
-      def read_body_input
-        return unless
-          (request.post? || request.put? || request.patch? || request.delete?) &&
-          (!request.form_data? || !request.media_type) &&
-          !request.parseable_data? &&
-          (request.content_length.to_i.positive? || request.env[Grape::Http::Headers::HTTP_TRANSFER_ENCODING] == CHUNKED)
+        request = Rack::Request.new(env)
+        media_type = request.media_type
+        return if RACK_PARSED_MEDIA_TYPES.include?(media_type)
 
-        return unless (input = env[Grape::Env::RACK_INPUT])
+        input = request.body # reads RACK_INPUT
+        return if input.nil?
 
-        input.rewind
+        rewind = input.respond_to?(:rewind)
+
+        input.rewind if rewind
         body = env[Grape::Env::API_REQUEST_INPUT] = input.read
         begin
-          read_rack_input(body) if body && !body.empty?
+          read_rack_input(env, body, media_type)
         ensure
-          input.rewind
+          input.rewind if rewind
         end
       end
 
-      # store parsed input in env['api.request.body']
-      def read_rack_input(body)
-        fmt = request.media_type ? mime_types[request.media_type] : options[:default_format]
+      def read_rack_input(env, body, media_type)
+        return if body.empty?
 
-        throw :error, status: 415, message: "The provided content-type '#{request.media_type}' is not supported." unless content_type_for(fmt)
-        parser = Grape::Parser.parser_for fmt, **options
-        if parser
-          begin
-            body = (env[Grape::Env::API_REQUEST_BODY] = parser.call(body, env))
-            if body.is_a?(Hash)
-              env[Grape::Env::RACK_REQUEST_FORM_HASH] = if env[Grape::Env::RACK_REQUEST_FORM_HASH]
-                                                          env[Grape::Env::RACK_REQUEST_FORM_HASH].merge(body)
-                                                        else
-                                                          body
-                                                        end
-              env[Grape::Env::RACK_REQUEST_FORM_INPUT] = env[Grape::Env::RACK_INPUT]
-            end
-          rescue Grape::Exceptions::Base => e
-            raise e
-          rescue StandardError => e
-            throw :error, status: 400, message: e.message, backtrace: e.backtrace, original_exception: e
-          end
+        parser = Grape::Parser.parser_for body_format(env, media_type), parsers
+        return env[Grape::Env::API_REQUEST_BODY] = body unless parser
+
+        begin
+          parsed = (env[Grape::Env::API_REQUEST_BODY] = parser.call(body, env))
+          merge_form_hash(env, parsed) if parsed.is_a?(Hash)
+        rescue ForeignParserError => e
+          throw :error, Grape::Exceptions::ErrorResponse.new(status: 400, message: e.message, backtrace: e.backtrace, original_exception: e)
+        end
+      end
+
+      # A body parsed into a Hash joins the form params Rack::Request reads,
+      # as a form body Rack parsed itself would.
+      def merge_form_hash(env, parsed)
+        if (form_hash = env[Rack::RACK_REQUEST_FORM_HASH])
+          form_hash.merge!(parsed)
         else
-          env[Grape::Env::API_REQUEST_BODY] = body
+          env[Rack::RACK_REQUEST_FORM_HASH] = parsed
         end
+        env[Rack::RACK_REQUEST_FORM_INPUT] = env[Rack::RACK_INPUT]
       end
 
-      def negotiate_content_type
-        fmt = format_from_extension || format_from_params || options[:format] || format_from_header || options[:default_format]
-        if content_type_for(fmt)
-          env[Grape::Env::API_FORMAT] = fmt
-        else
-          throw :error, status: 406, message: "The requested format '#{fmt}' is not supported."
-        end
-      end
+      # The format a body of +media_type+ is read as, thrown as an error
+      # response when it cannot be read at all.
+      def body_format(env, media_type)
+        # RFC 10008, Sections 2 and 2.1: a QUERY carries its query in the
+        # content, so a request that never says what that content is cannot be
+        # interpreted and must fail rather than be read as the default format.
+        # Every other method keeps that fallback.
+        throw :error, Grape::Exceptions::ErrorResponse.new(status: 400, message: 'The QUERY method requires a content-type.') if media_type.nil? && env[Rack::REQUEST_METHOD] == Grape::QUERY
 
-      def format_from_extension
-        parts = request.path.split('.')
-
-        if parts.size > 1
-          extension = parts.last
-          # avoid symbol memory leak on an unknown format
-          return extension.to_sym if content_type_for(extension)
-        end
-        nil
-      end
-
-      def format_from_params
-        fmt = Rack::Utils.parse_nested_query(env[Grape::Http::Headers::QUERY_STRING])[Grape::Http::Headers::FORMAT]
-        # avoid symbol memory leak on an unknown format
-        return fmt.to_sym if content_type_for(fmt)
+        fmt = media_type ? mime_types[media_type] : default_format
+        throw :error, Grape::Exceptions::ErrorResponse.new(status: 415, message: "The provided content-type '#{media_type}' is not supported.") unless content_type_for(fmt)
 
         fmt
       end
 
-      def format_from_header
-        mime_array.each do |t|
-          return mime_types[t] if mime_types.key?(t)
+      # What a parser raises that is not a Grape error, and so is answered as a
+      # 400 here. A Grape error goes on to the error middleware as it is. It
+      # used to be rescued just to be raised again, and re-raising at request
+      # depth cost about 25 µs -- paid by every malformed body, since the
+      # built-in parsers report one as InvalidMessageBody.
+      module ForeignParserError
+        def self.===(exception)
+          exception.is_a?(StandardError) && !exception.is_a?(Grape::Exceptions::Base)
         end
-        nil
+      end
+      private_constant :ForeignParserError
+
+      # Whether the request carries a body at all, read off the env alone. Every
+      # request asks, and the ones answered no -- the GET, HEAD and OPTIONS
+      # majority, and a POST or DELETE with nothing in it -- are answered before
+      # CONTENT_TYPE is parsed or a Rack::Request is built. The env key is
+      # spelled out: on Rack 3, +Rack::CONTENT_LENGTH+ names the response header.
+      def body_given?(env)
+        return false unless BODY_CARRYING_METHODS.include?(env[Rack::REQUEST_METHOD])
+
+        env['CONTENT_LENGTH'].to_i.positive? || env['HTTP_TRANSFER_ENCODING'] == 'chunked'
       end
 
-      def mime_array
-        accept = env[Grape::Http::Headers::HTTP_ACCEPT]
-        return [] unless accept
+      def negotiate_content_type(env)
+        fmt = format_from_extension(env) || format_from_query(env) || format || format_from_header(env) || default_format
+        return env[Grape::Env::API_FORMAT] = fmt.to_sym if content_type_for(fmt)
 
-        accept_into_mime_and_quality = %r{
-          (
-            \w+/[\w+.-]+)     # eg application/vnd.example.myformat+xml
-          (?:
-           (?:;[^,]*?)?       # optionally multiple formats in a row
-           ;\s*q=([\d.]+)     # optional "quality" preference (eg q=0.5)
-          )?
-        }x
+        synonym = declared_synonym(fmt)
+        return env[Grape::Env::API_FORMAT] = synonym if synonym
 
-        vendor_prefix_pattern = /vnd\.[^+]+\+/
+        throw :error, Grape::Exceptions::ErrorResponse.new(status: 406, message: "The requested format '#{fmt}' is not supported.")
+      end
 
-        accept.scan(accept_into_mime_and_quality)
-              .sort_by { |_, quality_preference| -quality_preference.to_f }
-              .flat_map { |mime, _| [mime, mime.sub(vendor_prefix_pattern, '')] }
+      # Only the extension is scrubbed, and only once the path turns out to have
+      # one: +String#rindex+ takes a byte offset and never raises on an invalid
+      # sequence, and a +.+ byte cannot be part of a multi-byte one, so the dot
+      # sits at the same place before and after scrubbing. The overwhelming
+      # majority of paths carry no extension and now skip the scrub entirely.
+      def format_from_extension(env)
+        request_path = path_for_extension(env)
+        dot_pos = request_path.rindex('.')
+        return unless dot_pos
+
+        # A start and a length rather than an endless Range, which is an object
+        # of its own built on every call. A length past the end is clamped.
+        extension = try_scrub(request_path[dot_pos + 1, request_path.length])
+        return extension if content_type_for(extension)
+
+        declared_synonym(extension)
+      end
+
+      # The name the API declared +fmt+ under when the request used another
+      # one for it (see Grape::ContentTypes::FORMAT_SYNONYMS), or nil.
+      def declared_synonym(fmt)
+        synonym = Grape::ContentTypes::FORMAT_SYNONYMS[fmt]
+        synonym if synonym && content_type_for(synonym)
+      end
+
+      # The extension is the tail of the request path, so PATH_INFO answers it
+      # on its own whenever there is one: a dot in SCRIPT_NAME is followed by
+      # the slash that opens PATH_INFO, and no registered extension holds a
+      # slash. Only an empty PATH_INFO needs +Rack::Request#path+ — and with it
+      # the String its concatenation allocates. Tested with +empty?+ rather
+      # than +blank?+: the path is not scrubbed yet, and a regexp match on an
+      # invalid byte sequence raises.
+      def path_for_extension(env)
+        path_info = env[Rack::PATH_INFO]
+        return Rack::Request.new(env).path if path_info.nil? || path_info.empty?
+
+        path_info
+      end
+
+      # +?format=+ can only be there when there is a query string at all, so
+      # the common query-less request skips parsing one.
+      #
+      # And a query string that spells neither +format+ nor a percent-escape
+      # cannot hold that key either: Rack splits the string on +&+ and +=+ and
+      # then unescapes each key, and unescaping only ever rewrites +%XX+ (or a
+      # +++, which becomes a space). So the parse -- the most expensive thing
+      # a request with a query string does, and one the endpoint may never ask
+      # for -- is left to whoever reads the params.
+      def format_from_query(env)
+        query_string = env[Rack::QUERY_STRING]
+        return if query_string.nil? || query_string.empty?
+        return unless query_string.include?(FORMAT_PARAM) || query_string.include?('%')
+
+        Rack::Request.new(env).GET[FORMAT_PARAM]
+      rescue *Grape::RACK_ERRORS
+        raise Grape::Exceptions::RequestError
+      end
+
+      # The keys are valid strings, which scrubbing leaves alone, so only a
+      # miss needs the header scrubbed.
+      def format_from_header(env)
+        accept_header = env['HTTP_ACCEPT']
+        @format_for_accept.fetch(accept_header) { Formatter.format_for_accept(try_scrub(accept_header), mime_types) }
       end
     end
   end

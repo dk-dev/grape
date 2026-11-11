@@ -1,19 +1,28 @@
 # frozen_string_literal: true
 
-require 'grape/exceptions/base'
-
 module Grape
   module Exceptions
-    class Validation < Grape::Exceptions::Base
-      attr_accessor :params, :message_key
+    class Validation < Base
+      EMPTY_BACKTRACE = [].freeze
 
-      def initialize(params:, message: nil, **args)
-        @params = params
-        if message
-          @message_key = message if message.is_a?(Symbol)
-          args[:message] = translate_message(message)
-        end
-        super(**args)
+      attr_reader :params, :message_key
+
+      def initialize(params:, message: nil, status: nil, headers: nil)
+        @params = Array(params)
+        # Without a message, StandardError#message answers with this class's
+        # name, and that reached the response -- from a custom validator with
+        # no default_message_key, say.
+        message ||= :invalid
+        @message_key = case message
+                       when Symbol then message
+                       when Hash then message[:key]
+                       end
+
+        super(status:, message: translate_message(message), headers:)
+        # Pre-seed the backtrace so Ruby's raise skips capture. Validation errors are
+        # a hot path (raised per bad attribute) and end up as 400 Bad Request responses;
+        # backtraces here point into Grape internals and have no diagnostic value.
+        set_backtrace(EMPTY_BACKTRACE)
       end
 
       # Remove all the unnecessary stuff from Grape::Exceptions::Base like status
@@ -22,8 +31,12 @@ module Grape
         to_s
       end
 
-      def to_s
-        message
+      # Returns +self+ so callers (e.g. +ValidationErrors#initialize+) can treat
+      # a single +Validation+ and a +ValidationArrayErrors+ wrapper uniformly via
+      # +flat_map(&:errors)+ — Array returns flatten in, non-Array returns
+      # (i.e. this +self+) append as one element.
+      def errors
+        self
       end
     end
   end

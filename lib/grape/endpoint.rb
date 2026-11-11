@@ -6,136 +6,129 @@ module Grape
   # on the instance level of this class may be called
   # from inside a `get`, `post`, etc.
   class Endpoint
+    extend Forwardable
     include Grape::DSL::Settings
+    include Grape::DSL::Headers
     include Grape::DSL::InsideRoute
 
-    attr_accessor :block, :source, :options
-    attr_reader :env, :request, :headers, :params
+    # The innermost app of every endpoint's Rack stack. The endpoint to run
+    # comes out of the env, so the lambda holds no state and one of them serves
+    # every stack, rather than one being allocated per endpoint.
+    RUN_ENDPOINT = ->(env) { env[Grape::Env::API_ENDPOINT].run }
+    private_constant :RUN_ENDPOINT
+
+    attr_reader :env, :request, :endpoints
+
+    # Written out rather than delegated: the request path reads them, and a
+    # +def_delegator+ method checks +defined?+ on every call.
+    def inheritable_setting
+      @state.inheritable_setting
+    end
+
+    def options
+      @state.options
+    end
+
+    def source
+      @state.source
+    end
+
+    def options_route_enabled
+      @state.options_route_enabled
+    end
+
+    def options_route_enabled=(enabled)
+      @state = @state.with(options_route_enabled: enabled)
+    end
+
+    def_delegators :request, :params, :headers, :cookies
+    def_delegator :cookies, :response_cookies
+
+    # The API (a +Grape::API+ instance) this endpoint belongs to.
+    def_delegator :config, :api
+
+    # The logger configured on the API this endpoint belongs to. Available
+    # inside route handlers, +before+/+after+/+after_validation+/+finally+
+    # filters, and +rescue_from+ blocks.
+    def_delegator :api, :logger
+
+    # The Rack app or Grape API mounted at this endpoint, or +nil+ for a plain
+    # block endpoint. Prefer this over +options[:app]+, which is retained only
+    # for backwards compatibility.
+    def mounted_app
+      config.app
+    end
+
+    # The paths this endpoint was declared at, relative to its {#namespace},
+    # as an Array: the paths given to +route+, or for a mount the path
+    # {#mounted_app} was mounted at.
+    def path
+      config.path
+    end
 
     class << self
-      def new(*args, &block)
-        self == Endpoint ? Class.new(Endpoint).new(*args, &block) : super
-      end
+      def block_to_unbound_method(block)
+        return unless block
 
-      def before_each(new_setup = false, &block)
-        @before_each ||= []
-        if new_setup == false
-          return @before_each unless block
-
-          @before_each << block
-        else
-          @before_each = [new_setup]
-        end
-      end
-
-      def run_before_each(endpoint)
-        superclass.run_before_each(endpoint) unless self == Endpoint
-        before_each.each { |blk| blk.call(endpoint) if blk.respond_to?(:call) }
-      end
-
-      # @api private
-      #
-      # Create an UnboundMethod that is appropriate for executing an endpoint
-      # route.
-      #
-      # The unbound method allows explicit calls to +return+ without raising a
-      # +LocalJumpError+. The method will be removed, but a +Proc+ reference to
-      # it will be returned. The returned +Proc+ expects a single argument: the
-      # instance of +Endpoint+ to bind to the method during the call.
-      #
-      # @param [String, Symbol] method_name
-      # @return [Proc]
-      # @raise [NameError] an instance method with the same name already exists
-      def generate_api_method(method_name, &block)
-        raise NameError.new("method #{method_name.inspect} already exists and cannot be used as an unbound method name") if method_defined?(method_name)
-
-        define_method(method_name, &block)
-        method = instance_method(method_name)
-        remove_method(method_name)
-
-        proc do |endpoint_instance|
-          ActiveSupport::Notifications.instrument('endpoint_render.grape', endpoint: endpoint_instance) do
-            method.bind(endpoint_instance).call
-          end
-        end
+        define_method :temp_unbound_method, block
+        method = instance_method(:temp_unbound_method)
+        remove_method :temp_unbound_method
+        method
       end
     end
 
     # Create a new endpoint.
     # @param new_settings [InheritableSetting] settings to determine the params,
     #   validations, and other properties from.
-    # @param options [Hash] attributes of this endpoint
-    # @option options path [String or Array] the path to this endpoint, within
-    #   the current scope.
-    # @option options method [String or Array] which HTTP method(s) can be used
-    #   to reach this endpoint.
+    # @param http_methods [String or Array] which HTTP method(s) can be used to
+    #   reach this endpoint.
+    # @param path [String or Array] the path to this endpoint, within the
+    #   current scope.
+    # @param api [Grape::API] the API this endpoint belongs to. Exposed as
+    #   {#api}.
+    # @param app [#call, nil] the Rack app or Grape API mounted at this
+    #   endpoint; +nil+ for a plain block endpoint. Exposed as {#mounted_app}.
+    # @param params [Hash] the declared params for this endpoint, keyed by name.
+    #   Kept out of +route_options+ and read via +config.params+.
+    # @param requirements [Hash, nil] regular-expression constraints for named
+    #   path params. Read via +config.requirements+.
+    # @param anchor [Boolean] whether the route anchors to the whole path
+    #   (default +true+). Read via +config.anchor+.
+    # @param options [Hash] attributes of this endpoint, normalized into a
+    #   +Grape::Endpoint::Options+ value object.
     # @option options route_options [Hash]
     # @note This happens at the time of API definition, so in this context the
     # endpoint does not know if it will be mounted under a different endpoint.
     # @yield a block defining what your API should do when this endpoint is hit
-    def initialize(new_settings, options = {}, &block)
-      require_option(options, :path)
-      require_option(options, :method)
+    def initialize(new_settings, http_methods:, path:, api:, app: nil, params: {}, requirements: nil, anchor: true, **options, &block)
+      config = Options.new(http_methods:, path:, api:, app:, params:, requirements:, anchor:, **options)
+      # +:app+ is still surfaced on the public options Hash for backwards
+      # compatibility (e.g. grape-swagger); prefer the +mounted_app+ reader.
+      options[:app] = app if app
 
-      self.inheritable_setting = new_settings.point_in_time_copy
-
-      # now +namespace_stackable(:declared_params)+ contains all params defined for
-      # this endpoint and its parents, but later it will be cleaned up,
-      # see +reset_validations!+ in lib/grape/dsl/validations.rb
-      route_setting(:declared_params, namespace_stackable(:declared_params).flatten)
-      route_setting(:saved_validations, namespace_stackable(:validations))
-
-      namespace_stackable(:representations, []) unless namespace_stackable(:representations)
-      namespace_inheritable(:default_error_status, 500) unless namespace_inheritable(:default_error_status)
-
-      @options = options
-
-      @options[:path] = Array(options[:path])
-      @options[:path] << '/' if options[:path].empty?
-
-      @options[:method] = Array(options[:method])
-      @options[:route_options] ||= {}
-
-      @lazy_initialize_lock = Mutex.new
-      @lazy_initialized = nil
-      @block = nil
-
-      @status = nil
-      @stream = nil
-      @body = nil
-      @proc = nil
-
-      return unless block
-
-      @source = block
-      @block = self.class.generate_api_method(method_name, &block)
+      @state = State.new(
+        inheritable_setting: new_settings.point_in_time_copy_for_endpoint,
+        options:,
+        config:,
+        source: self.class.block_to_unbound_method(block)
+      )
+      @endpoints = app.endpoints if app.respond_to?(:endpoints)
+      # The live settings of the scope the route is declared in. The copy in
+      # the State holds that scope's helpers as they were at this line; these
+      # also hold the ones declared further down, read once the API compiles.
+      @scope_setting = new_settings
     end
 
-    # Update our settings from a given set of stackable parameters. Used when
+    # Update our settings from a given parent settings instance. Used when
     # the endpoint's API is mounted under another one.
-    def inherit_settings(namespace_stackable)
-      inheritable_setting.route[:saved_validations] += namespace_stackable[:validations]
-      parent_declared_params = namespace_stackable[:declared_params]
-
-      inheritable_setting.route[:declared_params].concat(parent_declared_params.flatten) if parent_declared_params
-
-      endpoints&.each { |e| e.inherit_settings(namespace_stackable) }
-    end
-
-    def require_option(options, key)
-      raise Grape::Exceptions::MissingOption.new(key) unless options.key?(key)
-    end
-
-    def method_name
-      [options[:method],
-       Namespace.joined_space(namespace_stackable(:namespace)),
-       (namespace_stackable(:mount_path) || []).join('/'),
-       options[:path].join('/')]
-        .join(' ')
+    # @param settings [Grape::Util::InheritableSetting]
+    def inherit_settings(settings)
+      inheritable_setting.inherit_route_params(settings)
+      endpoints&.each { |e| e.inherit_settings(settings) }
     end
 
     def routes
-      @routes ||= endpoints ? endpoints.collect(&:routes).flatten : to_routes
+      @routes ||= endpoints&.flat_map(&:routes) || to_routes
     end
 
     def reset_routes!
@@ -146,260 +139,438 @@ module Grape
 
     def mount_in(router)
       if endpoints
-        endpoints.each { |e| e.mount_in(router) }
-      else
-        reset_routes!
-        routes.each do |route|
-          methods = [route.request_method]
-          methods << Grape::Http::Headers::HEAD if !namespace_inheritable(:do_not_route_head) && route.request_method == Grape::Http::Headers::GET
-          methods.each do |method|
-            route = Grape::Router::Route.new(method, route.origin, **route.attributes.to_h) unless route.request_method == method
-            router.append(route.apply(self))
-          end
-        end
+        compile!
+        return endpoints.each { |e| e.mount_in(router) }
       end
-    end
 
-    def to_routes
-      route_options = prepare_default_route_attributes
-      map_routes do |method, path|
-        path = prepare_path(path)
-        params = merge_route_options(**route_options.merge(suffix: path.suffix))
-        route = Router::Route.new(method, path.path, **params)
-        route.apply(self)
-      end.flatten
-    end
-
-    def prepare_routes_requirements
-      endpoint_requirements = options[:route_options][:requirements] || {}
-      all_requirements = (namespace_stackable(:namespace).map(&:requirements) << endpoint_requirements)
-      all_requirements.reduce({}) do |base_requirements, single_requirements|
-        base_requirements.merge!(single_requirements)
-      end
-    end
-
-    def prepare_default_route_attributes
-      {
-        namespace: namespace,
-        version: prepare_version,
-        requirements: prepare_routes_requirements,
-        prefix: namespace_inheritable(:root_prefix),
-        anchor: options[:route_options].fetch(:anchor, true),
-        settings: inheritable_setting.route.except(:declared_params, :saved_validations),
-        forward_match: options[:forward_match]
-      }
-    end
-
-    def prepare_version
-      version = namespace_inheritable(:version) || []
-      return if version.empty?
-
-      version.length == 1 ? version.first.to_s : version
-    end
-
-    def merge_route_options(**default)
-      options[:route_options].clone.merge!(**default)
-    end
-
-    def map_routes
-      options[:method].map { |method| options[:path].map { |path| yield method, path } }
-    end
-
-    def prepare_path(path)
-      path_settings = inheritable_setting.to_hash[:namespace_stackable].merge(inheritable_setting.to_hash[:namespace_inheritable])
-      Path.prepare(path, namespace, path_settings)
+      reset_routes!
+      compile!
+      append_routes_to(router)
     end
 
     def namespace
-      @namespace ||= Namespace.joined_space_path(namespace_stackable(:namespace))
+      @namespace ||= inheritable_setting.namespace_path
     end
 
     def call(env)
-      lazy_initialize!
-      dup.call!(env)
+      @prototype.dup.call!(env)
     end
 
     def call!(env)
       env[Grape::Env::API_ENDPOINT] = self
       @env = env
-      @app.call(env)
+      @state.app.call(env)
     end
 
-    # Return the collection of endpoints within this endpoint.
-    # This is the case when an Grape::API mounts another Grape::API.
-    def endpoints
-      options[:app].endpoints if options[:app].respond_to?(:endpoints)
+    def ==(other)
+      other.is_a?(self.class) &&
+        config == other.config &&
+        inheritable_setting == other.inheritable_setting
+    end
+    alias eql? ==
+
+    # Mirrors #==. The class stays out: #== admits a subclass instance
+    # through is_a?, and such a pair must hash alike. The block (#source) is
+    # not part of either, matching the long-standing duplicate-route check in
+    # DSL::Routing#route.
+    def hash
+      [config, inheritable_setting].hash
     end
 
-    def equals?(e)
-      (options == e.options) && (inheritable_setting.to_hash == e.inheritable_setting.to_hash)
+    # The purpose of this override is solely for stripping internals when an error occurs while calling
+    # an endpoint through an api. See https://github.com/ruby-grape/grape/issues/2398
+    # Otherwise, it calls super.
+    def inspect
+      return super unless env
+
+      "#{self.class} in '#{route.origin}' endpoint"
+    end
+
+    # Serve the request the endpoint's Rack stack was entered with: its
+    # +before+ filters, its validations, the route block, its +after+ and
+    # +finally+ filters, answered as a Rack triplet. The innermost app of that
+    # stack calls it, so it expects #call! to have put the env in place first.
+    def run
+      instrument_run do
+        @request = Grape::Request.new(env, build_params_with: @state.build_params_with)
+        callbacks = @state.callbacks
+        begin
+          run_filters callbacks, :before if callbacks
+          @before_filter_passed = true
+
+          response_object = env.key?(Grape::Env::GRAPE_ALLOWED_METHODS) ? answer_allowed_methods : validate_and_execute(callbacks)
+          run_filters callbacks, :after if callbacks
+          build_response_cookies
+          rack_triplet(response_object)
+        ensure
+          run_filters callbacks, :finally if callbacks
+        end
+      end
     end
 
     protected
 
-    def run
-      ActiveSupport::Notifications.instrument('endpoint_run.grape', endpoint: self, env: env) do
-        @header = {}
-        @request = Grape::Request.new(env, build_params_with: namespace_inheritable(:build_params_with))
-        @params = @request.params
-        @headers = @request.headers
-        begin
-          cookies.read(@request)
-          self.class.run_before_each(self)
-          run_filters befores, :before
-
-          if (allowed_methods = env[Grape::Env::GRAPE_ALLOWED_METHODS])
-            raise Grape::Exceptions::MethodNotAllowed.new(header.merge('Allow' => allowed_methods)) unless options?
-
-            header 'Allow', allowed_methods
-            response_object = ''
-            status 204
-          else
-            run_filters before_validations, :before_validation
-            run_validators validations, request
-            run_filters after_validations, :after_validation
-            response_object = execute
-          end
-
-          run_filters afters, :after
-          cookies.write(header)
-
-          # status verifies body presence when DELETE
-          @body ||= response_object
-
-          # The body commonly is an Array of Strings, the application instance itself, or a Stream-like object
-          response_object = stream || [body]
-
-          [status, header, response_object]
-        ensure
-          run_filters finallies, :finally
-        end
-      end
-    end
-
-    def build_stack(helpers)
-      stack = Grape::Middleware::Stack.new
-
-      stack.use Rack::Head
-      stack.use Class.new(Grape::Middleware::Error),
-                helpers: helpers,
-                format: namespace_inheritable(:format),
-                content_types: namespace_stackable_with_hash(:content_types),
-                default_status: namespace_inheritable(:default_error_status),
-                rescue_all: namespace_inheritable(:rescue_all),
-                rescue_grape_exceptions: namespace_inheritable(:rescue_grape_exceptions),
-                default_error_formatter: namespace_inheritable(:default_error_formatter),
-                error_formatters: namespace_stackable_with_hash(:error_formatters),
-                rescue_options: namespace_stackable_with_hash(:rescue_options) || {},
-                rescue_handlers: namespace_reverse_stackable_with_hash(:rescue_handlers) || {},
-                base_only_rescue_handlers: namespace_stackable_with_hash(:base_only_rescue_handlers) || {},
-                all_rescue_handler: namespace_inheritable(:all_rescue_handler)
-
-      stack.concat namespace_stackable(:middleware)
-
-      if namespace_inheritable(:version)
-        stack.use Grape::Middleware::Versioner.using(namespace_inheritable(:version_options)[:using]),
-                  versions: namespace_inheritable(:version) ? namespace_inheritable(:version).flatten : nil,
-                  version_options: namespace_inheritable(:version_options),
-                  prefix: namespace_inheritable(:root_prefix),
-                  mount_path: namespace_stackable(:mount_path).first
-      end
-
-      stack.use Grape::Middleware::Formatter,
-                format: namespace_inheritable(:format),
-                default_format: namespace_inheritable(:default_format) || :txt,
-                content_types: namespace_stackable_with_hash(:content_types),
-                formatters: namespace_stackable_with_hash(:formatters),
-                parsers: namespace_stackable_with_hash(:parsers)
-
-      builder = stack.build
-      builder.run ->(env) { env[Grape::Env::API_ENDPOINT].run }
-      builder.to_app
-    end
-
-    def build_helpers
-      helpers = namespace_stackable(:helpers) || []
-      Module.new { helpers.each { |mod_to_include| include mod_to_include } }
-    end
-
-    private :build_stack, :build_helpers
-
     def execute
-      @block ? @block.call(self) : nil
-    end
+      source = @state.source
+      return unless source
 
-    def helpers
-      lazy_initialize! && @helpers
-    end
-
-    def lazy_initialize!
-      return true if @lazy_initialized
-
-      @lazy_initialize_lock.synchronize do
-        return true if @lazy_initialized
-
-        @helpers = build_helpers.tap { |mod| self.class.send(:include, mod) }
-        @app = options[:app] || build_stack(@helpers)
-
-        @lazy_initialized = true
+      instrument_render do
+        source.bind_call(self)
       end
     end
 
-    def run_validators(validator_factories, request)
-      validation_errors = []
+    # Undeclared params are looked for once the validators have run, so that a
+    # +JSON+ param sent as a String is looked into as the Hash it is coerced to.
+    def run_validators(request:)
+      validators = @state.inheritable_setting.route_validations
+      validation_exceptions = validation_exceptions_from(validators, request) unless validators.empty?
+      undeclared = @state.undeclared_params&.errors(request)
+      validation_exceptions = [*validation_exceptions, *undeclared] if undeclared
 
-      validators = validator_factories.map { |options| Grape::Validations::ValidatorFactory.create_validator(**options) }
+      raise Grape::Exceptions::ValidationErrors.new(exceptions: validation_exceptions, headers: header) if validation_exceptions
+    end
 
-      ActiveSupport::Notifications.instrument('endpoint_run_validators.grape', endpoint: self, validators: validators, request: request) do
-        validators.each do |validator|
-          validator.validate(request)
-        rescue Grape::Exceptions::Validation => e
-          validation_errors << e
-          break if validator.fail_fast?
-        rescue Grape::Exceptions::ValidationArrayErrors => e
-          validation_errors.concat e.errors
-          break if validator.fail_fast?
-        end
+    # An endpoint with filters still has none in most of its five phases, so
+    # an empty phase returns before it is instrumented.
+    def run_filters(callbacks, type)
+      filters = callbacks[type]
+      return if filters.empty?
+
+      instrument_run_filters(filters, type) do
+        filters.each { |filter| instance_eval(&filter) }
       end
-
-      validation_errors.any? && raise(Grape::Exceptions::ValidationErrors.new(errors: validation_errors, headers: header))
     end
 
-    def run_filters(filters, type = :other)
-      ActiveSupport::Notifications.instrument('endpoint_run_filters.grape', endpoint: self, filters: filters, type: type) do
-        (filters || []).each { |filter| instance_eval(&filter) }
-      end
-      post_extension = DSL::InsideRoute.post_filter_methods(type)
-      extend post_extension if post_extension
-    end
-
-    def befores
-      namespace_stackable(:befores) || []
-    end
-
-    def before_validations
-      namespace_stackable(:before_validations) || []
-    end
-
-    def after_validations
-      namespace_stackable(:after_validations) || []
-    end
-
-    def afters
-      namespace_stackable(:afters) || []
-    end
-
-    def finallies
-      namespace_stackable(:finallies) || []
-    end
-
-    def validations
-      route_setting(:saved_validations) || []
+    def config
+      @state.config
     end
 
     def options?
-      options[:options_route_enabled] &&
-        env[Grape::Http::Headers::REQUEST_METHOD] == Grape::Http::Headers::OPTIONS
+      options_route_enabled && env[Rack::REQUEST_METHOD] == Rack::OPTIONS
+    end
+
+    # Makes an +allocate+d endpoint the prototype #build_prototype answers:
+    # +state+, and the ivars a request sets, in place so that every copy
+    # starts with the same shape.
+    def become_prototype(state)
+      @state = state
+      @status = nil
+      @stream = nil
+      @body = nil
+      @before_filter_passed = false
+      self
+    end
+
+    private
+
+    attr_reader :before_filter_passed
+
+    # The answer of an allowed-methods route, which the router hands a request
+    # for a method its path has no route for: the Allow header, with a 204 to an
+    # auto-OPTIONS and a 405 to anything else.
+    def answer_allowed_methods
+      header['allow'] = env[Grape::Env::GRAPE_ALLOWED_METHODS].join(', ')
+      raise Grape::Exceptions::MethodNotAllowed.new(header) unless options?
+
+      status 204
+      ''
+    end
+
+    def validation_exceptions_from(validators, request)
+      validation_exceptions = nil
+
+      Grape::Validations::ParamScopeTracker.track do
+        instrument_run_validators(validators, request) do
+          validators.each do |validator|
+            validator.validate(request)
+          rescue Grape::Exceptions::Validation, Grape::Exceptions::ValidationArrayErrors => e
+            (validation_exceptions ||= []) << e
+            break if validator.fail_fast?
+          end
+        end
+      end
+
+      validation_exceptions
+    end
+
+    # The route block's value, run once the params are validated between the
+    # +before_validation+ and +after_validation+ filters.
+    def validate_and_execute(callbacks)
+      run_filters callbacks, :before_validation if callbacks
+      run_validators(request:)
+      run_filters callbacks, :after_validation if callbacks
+      execute
+    end
+
+    # The response #run answers with, its body +route_value+ unless the
+    # endpoint set a body or a stream itself.
+    def rack_triplet(route_value)
+      # status verifies body presence when DELETE
+      @body ||= route_value
+
+      # The body commonly is an Array of Strings, the application instance itself, or a Stream-like object
+      response_body = stream || [body]
+
+      [status, header, response_body]
+    end
+
+    # Instrument helpers. Each guards on +listening?+ so that with no subscriber
+    # the payload Hash and notification machinery are skipped and the block runs
+    # directly (no added allocations); the block is forwarded anonymously so
+    # nothing is allocated unless a subscriber is present.
+    def instrument_run(&)
+      return yield unless ActiveSupport::Notifications.notifier.listening?('endpoint_run.grape')
+
+      ActiveSupport::Notifications.instrument('endpoint_run.grape', endpoint: self, env:, &)
+    end
+
+    def instrument_render(&)
+      return yield unless ActiveSupport::Notifications.notifier.listening?('endpoint_render.grape')
+
+      ActiveSupport::Notifications.instrument('endpoint_render.grape', endpoint: self, &)
+    end
+
+    def instrument_run_validators(validators, request, &)
+      return yield unless ActiveSupport::Notifications.notifier.listening?('endpoint_run_validators.grape')
+
+      ActiveSupport::Notifications.instrument('endpoint_run_validators.grape', endpoint: self, validators:, request:, &)
+    end
+
+    def instrument_run_filters(filters, type, &)
+      return yield unless ActiveSupport::Notifications.notifier.listening?('endpoint_run_filters.grape')
+
+      ActiveSupport::Notifications.instrument('endpoint_run_filters.grape', endpoint: self, filters:, type:, &)
+    end
+
+    def compile!
+      app = config.app || build_stack
+      warn_unauthenticated_mounted_app
+      # nil when no phase has a filter -- most endpoints -- so that #run skips
+      # all five on one read.
+      callbacks = inheritable_setting.callbacks
+      @state = @state.with(
+        app:,
+        callbacks: callbacks.each_value.all?(&:empty?) ? nil : callbacks.freeze,
+        build_params_with: inheritable_setting.build_params_with,
+        undeclared_params: build_undeclared_params
+      )
+      @prototype = build_prototype(build_helpers)
+    end
+
+    def build_undeclared_params
+      return if Grape.config.allow_undeclared_params
+
+      Grape::Validations::UndeclaredParams.new(
+        declared_params: inheritable_setting.route_declared_params,
+        contract_key_maps: inheritable_setting.contract_key_maps,
+        path_params: routes.flat_map { |route| route.pattern.to_regexp.names }
+      )
+    end
+
+    # The object each request is copied from: this endpoint's State, and none
+    # of the route-building state (+@prototype+, +@endpoints+, +@namespace+,
+    # +@routes+) the request path never reads.
+    #
+    # Ruby sizes a new object by the most instance variables any object of its
+    # class has held. A copy holds the State and the seven ivars a request
+    # sets, which fits an 80-byte slot until a route block or a helper sets one
+    # of its own; carrying the route-building state as well, it took 320. The
+    # endpoint itself counts too when there are no helpers, both being a
+    # Grape::Endpoint, and it holds at most six.
+    #
+    # Helpers reach an endpoint by module inclusion, and +Object#dup+ does not
+    # carry a singleton class over — so including them on the per-request copy
+    # meant giving every request a brand-new singleton class, whose method
+    # cache then started cold for the helpers, the route block and every DSL
+    # method the endpoint answers. Include them once into a subclass owned by
+    # this endpoint instead, and hand its State to an instance of it: the
+    # per-request copy already answers to the helpers, against a class that
+    # has been warm since boot. It also keeps request handling free of class
+    # mutation.
+    #
+    # +allocate+ rather than +new+ because the constructor builds an endpoint
+    # from the DSL's arguments — a fresh settings copy, a fresh +config+,
+    # another +block_to_unbound_method+ — and would still not hold what
+    # +compile!+ has just computed, while the State already holds all of it.
+    def build_prototype(helpers)
+      (helpers ? helpers_class(helpers) : self.class).allocate.become_prototype(@state)
+    end
+
+    def helpers_class(helpers)
+      klass = Class.new(self.class)
+      # Anonymous classes answer nil to +name+ and render as a bare address,
+      # which would reach anything that reports on the endpoint — +inspect+
+      # here, a logger or an error tracker elsewhere. The annotation is what
+      # +set_temporary_name+ is for; a plain constant path is rejected, which
+      # is right, since this class is not reachable under that name.
+      klass.set_temporary_name("#{self.class}(helpers)")
+      klass.include(helpers)
+    end
+
+    # Each route, and after a GET route the HEAD route it also answers unless
+    # the API declared +do_not_route_head!+.
+    def append_routes_to(router)
+      routes.each do |route|
+        router.append(route.apply(self))
+        next if inheritable_setting.do_not_route_head? || route.request_method != Rack::GET
+
+        router.append(route.to_head.apply(self))
+      end
+    end
+
+    def to_routes
+      patterns = route_patterns
+      route_options = config.route_options
+      attributes = route_attributes
+
+      config.http_methods.flat_map do |method|
+        patterns.map { |pattern| Grape::Router::Route.new(self, method, pattern, route_options, **attributes) }
+      end
+    end
+
+    # The pattern of each of the endpoint's paths, shared by the routes of
+    # every method it answers, as a HEAD route shares its GET route's.
+    def route_patterns
+      path_settings = inheritable_setting.path_settings
+      params = config.params
+      version = prepare_version
+      requirements = prepare_routes_requirements
+      anchor = config.anchor
+
+      config.path.map do |path|
+        Grape::Router::Pattern.build(
+          path:,
+          namespace:,
+          settings: path_settings,
+          anchor:,
+          params:,
+          version:,
+          requirements:
+        )
+      end
+    end
+
+    # What every route of the endpoint is built with besides its method,
+    # pattern and options, read once for all of them.
+    def route_attributes
+      setting = inheritable_setting
+      { forward_match: bare_rack_app?, params: config.params, namespace:, prefix: setting.root_prefix, settings: setting.route_settings }
+    end
+
+    # True when a bare Rack app (anything that isn't a Grape app) is mounted at
+    # this endpoint. Such an app is called directly and matched by path prefix
+    # rather than an anchored route.
+    def bare_rack_app?
+      config.app && !config.app.is_a?(Grape::Mountable)
+    end
+
+    def prepare_routes_requirements
+      namespace_requirements = inheritable_setting.namespace_requirements
+      route_requirements = config.requirements
+      namespace_requirements << route_requirements if route_requirements
+      {}.merge!(*namespace_requirements)
+    end
+
+    def prepare_version
+      namespace_inheritable_version = inheritable_setting.version
+      return if namespace_inheritable_version.nil? || namespace_inheritable_version.empty?
+
+      namespace_inheritable_version.length == 1 ? namespace_inheritable_version.first : namespace_inheritable_version
+    end
+
+    def build_stack
+      stack = Grape::Middleware::Stack.new
+
+      setting = inheritable_setting
+      content_types = setting.content_types
+      format = setting.format
+
+      stack.use Grape::Middleware::Error, **error_middleware_options(format, content_types)
+
+      stack.concat setting.middleware
+      use_versioner(stack)
+      stack.use Grape::Middleware::Formatter, **formatter_middleware_options(format, content_types)
+
+      builder = stack.build
+      builder.run RUN_ENDPOINT
+      builder.to_app
+    end
+
+    # The versioner for the strategy +version+ declared, when it declared one.
+    def use_versioner(stack)
+      setting = inheritable_setting
+      versions = setting.version
+      return if versions.nil? || versions.empty?
+
+      version_options = setting.version_options
+      stack.use Grape::Middleware::Versioner.using(version_options.using),
+                versions: versions.flatten,
+                version_options:,
+                prefix: setting.root_prefix,
+                mount_path: setting.mount_path
+    end
+
+    def formatter_middleware_options(format, content_types)
+      setting = inheritable_setting
+      {
+        format:,
+        default_format: setting.default_format || :txt,
+        content_types:,
+        formatters: setting.formatters,
+        parsers: setting.parsers
+      }
+    end
+
+    def error_middleware_options(format, content_types)
+      setting = inheritable_setting
+      {
+        format:,
+        content_types:,
+        default_status: setting.default_error_status,
+        rescue_all: setting.rescue_all?,
+        rescue_grape_exceptions: setting.rescue_grape_exceptions?,
+        default_error_formatter: setting.default_error_formatter,
+        error_formatters: setting.error_formatters,
+        rescue_options: setting.rescue_options,
+        rescue_handlers: setting.rescue_handlers,
+        base_only_rescue_handlers: setting.base_only_rescue_handlers,
+        all_rescue_handler: setting.all_rescue_handler,
+        grape_exceptions_rescue_handler: setting.grape_exceptions_rescue_handler,
+        internal_grape_exceptions_rescue_handler: setting.internal_grape_exceptions_rescue_handler
+      }
+    end
+
+    # Every helper of the route's scope, wherever it was declared in it, and
+    # of the scopes around it.
+    def build_helpers
+      helpers = @scope_setting.helpers
+      return if helpers.empty?
+
+      composed = Module.new { helpers.each { |mod_to_include| include mod_to_include } }
+      RedefinedHelpersWarning.call(routes:, above: inheritable_setting.helpers, helpers:, composed:)
+      composed
+    end
+
+    # A bare Rack app mounted with +mount+ is called directly (see +compile!+):
+    # it does not go through +build_stack+, so the API's authentication
+    # middleware never runs and the mount is reachable unauthenticated. Mounted
+    # Grape APIs are unaffected because they rebuild their own stack from the
+    # inherited settings. Warn so this bypass isn't silent.
+    def warn_unauthenticated_mounted_app
+      return unless bare_rack_app?
+      return unless inheritable_setting.auth
+
+      warn "Grape: #{config.app} is mounted under an API that declares authentication, but authentication " \
+           'middleware does not wrap mounted Rack applications. Requests to this mount are not authenticated by Grape.'
+    end
+
+    def build_response_cookies
+      return unless request.cookies?
+
+      response_cookies do |name, value|
+        cookie_value = value.is_a?(Hash) ? value : { value: }
+        Rack::Utils.set_cookie_header! header, name, cookie_value
+      end
     end
   end
 end

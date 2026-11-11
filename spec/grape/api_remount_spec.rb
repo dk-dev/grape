@@ -1,15 +1,13 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
 require 'shared/versioning_examples'
 
 describe Grape::API do
-  subject(:a_remounted_api) { Class.new(Grape::API) }
-  let(:root_api) { Class.new(Grape::API) }
+  subject(:a_remounted_api) { Class.new(described_class) }
 
-  def app
-    root_api
-  end
+  let(:root_api) { Class.new(described_class) }
+
+  let(:app) { root_api }
 
   describe 'remounting an API' do
     context 'with a defined route' do
@@ -44,6 +42,38 @@ describe Grape::API do
         end
       end
 
+      context 'when mounting twice and declaring a route after' do
+        before do
+          root_api.mount a_remounted_api => '/posts'
+          root_api.mount a_remounted_api => '/comments'
+          root_api.get('/other') { 'other' }
+        end
+
+        it 'can access the votes in both places' do
+          get '/posts/votes'
+          expect(last_response.body).to eql '10 votes'
+          get '/comments/votes'
+          expect(last_response.body).to eql '10 votes'
+        end
+      end
+
+      context 'when mounting at the root and again on a namespace' do
+        before do
+          stub_const('StaticRefToAPI', a_remounted_api)
+          root_api.mount a_remounted_api
+          root_api.namespace 'comments' do
+            mount StaticRefToAPI
+          end
+        end
+
+        it 'can access the votes in both places' do
+          get '/votes'
+          expect(last_response.body).to eql '10 votes'
+          get '/comments/votes'
+          expect(last_response.body).to eql '10 votes'
+        end
+      end
+
       context 'when mounting on namespace' do
         before do
           stub_const('StaticRefToAPI', a_remounted_api)
@@ -68,7 +98,7 @@ describe Grape::API do
     describe 'with dynamic configuration' do
       context 'when mounting an endpoint conditional on a configuration' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             get 'always' do
               'success'
             end
@@ -95,13 +125,13 @@ describe Grape::API do
           expect(last_response.body).to eq 'success'
 
           get '/without_conditional/sometimes'
-          expect(last_response.status).to eq 404
+          expect(last_response).to be_not_found
         end
       end
 
       context 'when using an expression derived from a configuration' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             get(mounted { "api_name_#{configuration[:api_name]}" }) do
               'success'
             end
@@ -126,7 +156,7 @@ describe Grape::API do
 
         context 'when the expression lives in a namespace' do
           subject(:a_remounted_api) do
-            Class.new(Grape::API) do
+            Class.new(described_class) do
               namespace :base do
                 get(mounted { "api_name_#{configuration[:api_name]}" }) do
                   'success'
@@ -147,9 +177,45 @@ describe Grape::API do
         end
       end
 
+      context 'when the params are configured via a configuration' do
+        subject(:a_remounted_api) do
+          Class.new(described_class) do
+            params do
+              requires configuration[:required_attr_name], type: String
+            end
+
+            get(mounted { configuration[:endpoint] }) do
+              status 200
+            end
+          end
+        end
+
+        context 'when the configured param is my_attr' do
+          it 'requires the configured params' do
+            root_api.mount a_remounted_api, with: {
+              required_attr_name: 'my_attr',
+              endpoint: 'test'
+            }
+            get 'test?another_attr=1'
+            expect(last_response).to be_bad_request
+            get 'test?my_attr=1'
+            expect(last_response).to be_successful
+
+            root_api.mount a_remounted_api, with: {
+              required_attr_name: 'another_attr',
+              endpoint: 'test_b'
+            }
+            get 'test_b?another_attr=1'
+            expect(last_response).to be_successful
+            get 'test_b?my_attr=1'
+            expect(last_response).to be_bad_request
+          end
+        end
+      end
+
       context 'when executing a standard block within a `mounted` block with all dynamic params' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             mounted do
               desc configuration[:description] do
                 headers configuration[:headers]
@@ -176,7 +242,7 @@ describe Grape::API do
         it 'mounts the API and obtains the description and headers definition' do
           root_api.mount a_remounted_api, with: {
             description: endpoint_description,
-            headers: headers,
+            headers:,
             endpoint: api_endpoint,
             response: api_response
           }
@@ -191,7 +257,7 @@ describe Grape::API do
 
       context 'when executing a custom block on mount' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             get 'always' do
               'success'
             end
@@ -215,7 +281,7 @@ describe Grape::API do
 
       context 'when the configuration is part of the arguments of a method' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             get configuration[:endpoint_name] do
               'success'
             end
@@ -228,7 +294,7 @@ describe Grape::API do
           expect(last_response.body).to eq 'success'
 
           get '/different_location'
-          expect(last_response.status).to eq 404
+          expect(last_response).to be_not_found
 
           root_api.mount a_remounted_api, with: { endpoint_name: 'new_location' }
           get '/new_location'
@@ -237,7 +303,7 @@ describe Grape::API do
 
         context 'when the configuration is the value in a key-arg pair' do
           subject(:a_remounted_api) do
-            Class.new(Grape::API) do
+            Class.new(described_class) do
               version 'v1', using: :param, parameter: configuration[:version_param]
               get 'endpoint' do
                 'version 1'
@@ -267,24 +333,26 @@ describe Grape::API do
 
       context 'on the DescSCope' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             desc 'The description of this' do
               tags ['not_configurable_tag', configuration[:a_configurable_tag]]
             end
             get 'location' do
-              'success'
+              route.tags
             end
           end
         end
 
         it 'mounts the endpoint with the appropiate tags' do
           root_api.mount({ a_remounted_api => 'integer' }, with: { a_configurable_tag: 'a configured tag' })
+          get '/integer/location', param_key: 'a'
+          expect(JSON.parse(last_response.body)).to eq ['not_configurable_tag', 'a configured tag']
         end
       end
 
       context 'on the ParamScope' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             params do
               requires configuration[:required_param], type: configuration[:required_type]
             end
@@ -303,18 +371,18 @@ describe Grape::API do
           expect(last_response.body).to eq 'success'
 
           get '/string/location', param_integer: 1
-          expect(last_response.status).to eq 400
+          expect(last_response).to be_bad_request
 
           get '/integer/location', param_integer: 1
           expect(last_response.body).to eq 'success'
 
           get '/integer/location', param_integer: 'a'
-          expect(last_response.status).to eq 400
+          expect(last_response).to be_bad_request
         end
 
         context 'on dynamic checks' do
           subject(:a_remounted_api) do
-            Class.new(Grape::API) do
+            Class.new(described_class) do
               params do
                 optional :restricted_values, values: -> { [configuration[:allowed_value], 'always'] }
               end
@@ -332,8 +400,34 @@ describe Grape::API do
             get '/location', restricted_values: 'sometimes'
             expect(last_response.body).to eq 'success'
             get '/location', restricted_values: 'never'
-            expect(last_response.status).to eq 400
+            expect(last_response).to be_bad_request
           end
+        end
+      end
+
+      context 'when the configuration is nested' do
+        subject(:a_remounted_api) do
+          Class.new(described_class) do
+            get configuration[:db][:path] do
+              "#{configuration[:db][:host]} #{configuration[:hosts][0]}"
+            end
+          end
+        end
+
+        it 'reads a key nested in a Hash and in an Array' do
+          root_api.mount a_remounted_api, with: { db: { path: 'votes', host: 'localhost' }, hosts: %w[a b] }
+          get '/votes'
+          expect(last_response.body).to eq 'localhost a'
+        end
+
+        it 'reads a different value on every mount' do
+          root_api.mount({ a_remounted_api => 'first' }, with: { db: { path: 'votes', host: 'localhost' }, hosts: %w[a b] })
+          root_api.mount({ a_remounted_api => 'second' }, with: { db: { path: 'scores', host: 'example.com' }, hosts: %w[x y] })
+
+          get '/first/votes'
+          expect(last_response.body).to eq 'localhost a'
+          get '/second/scores'
+          expect(last_response.body).to eq 'example.com x'
         end
       end
 
@@ -351,19 +445,19 @@ describe Grape::API do
           root_api.mount a_remounted_api, with: { path: 'scores', required_param: 'param_key' }
         end
 
-        it 'will use the dynamic configuration on all routes' do
+        it 'uses the dynamic configuration on all routes' do
           get 'api/votes', param_key: 'a'
           expect(last_response.body).to eql '10 votes'
           get 'api/scores', param_key: 'a'
           expect(last_response.body).to eql '10 votes'
           get 'api/votes'
-          expect(last_response.status).to eq 400
+          expect(last_response).to be_bad_request
         end
       end
 
       context 'a very complex configuration example' do
         before do
-          top_level_api = Class.new(Grape::API) do
+          top_level_api = Class.new(described_class) do
             remounted_api = Class.new(Grape::API) do
               get configuration[:endpoint_name] do
                 configuration[:response]
@@ -431,7 +525,7 @@ describe Grape::API do
 
       context 'when the configuration is read in a helper' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             helpers do
               def printed_response
                 configuration[:some_value]
@@ -444,7 +538,7 @@ describe Grape::API do
           end
         end
 
-        it 'will use the dynamic configuration on all routes' do
+        it 'uses the dynamic configuration on all routes' do
           root_api.mount(a_remounted_api, with: { some_value: 'response value' })
 
           get '/location'
@@ -454,18 +548,78 @@ describe Grape::API do
 
       context 'when the configuration is read within the response block' do
         subject(:a_remounted_api) do
-          Class.new(Grape::API) do
+          Class.new(described_class) do
             get 'location' do
               configuration[:some_value]
             end
           end
         end
 
-        it 'will use the dynamic configuration on all routes' do
+        it 'uses the dynamic configuration on all routes' do
           root_api.mount(a_remounted_api, with: { some_value: 'response value' })
 
           get '/location'
           expect(last_response.body).to eq 'response value'
+        end
+      end
+    end
+
+    context 'with route settings' do
+      before do
+        a_remounted_api.desc 'Identical description'
+        a_remounted_api.route_setting :custom, key: 'value'
+        a_remounted_api.route_setting :custom_diff, key: 'foo'
+        a_remounted_api.get '/api1' do
+          status 200
+        end
+
+        a_remounted_api.desc 'Identical description'
+        a_remounted_api.route_setting :custom, key: 'value'
+        a_remounted_api.route_setting :custom_diff, key: 'bar'
+        a_remounted_api.get '/api2' do
+          status 200
+        end
+      end
+
+      it 'has all the settings for both routes' do
+        expect(a_remounted_api.routes.count).to be(2)
+        expect(a_remounted_api.routes[0].settings).to include(
+          {
+            description: { description: 'Identical description' },
+            custom: { key: 'value' },
+            custom_diff: { key: 'foo' }
+          }
+        )
+        expect(a_remounted_api.routes[1].settings).to include(
+          {
+            description: { description: 'Identical description' },
+            custom: { key: 'value' },
+            custom_diff: { key: 'bar' }
+          }
+        )
+      end
+
+      context 'when mounting it' do
+        before do
+          root_api.mount a_remounted_api
+        end
+
+        it 'still has all the settings for both routes' do
+          expect(root_api.routes.count).to be(2)
+          expect(root_api.routes[0].settings).to include(
+            {
+              description: { description: 'Identical description' },
+              custom: { key: 'value' },
+              custom_diff: { key: 'foo' }
+            }
+          )
+          expect(root_api.routes[1].settings).to include(
+            {
+              description: { description: 'Identical description' },
+              custom: { key: 'value' },
+              custom_diff: { key: 'bar' }
+            }
+          )
         end
       end
     end

@@ -13,6 +13,8 @@ module Grape
       # an allowed type it should be declared last, since it will always
       # successfully "coerce" the value.
       class MultipleTypeCoercer
+        extend Grape::Util::FreezeOnNew
+
         # Construct a new coercer that will attempt to coerce
         # values to the given list of types in the given order.
         #
@@ -28,23 +30,22 @@ module Grape
             else
               Types.build_coercer type, strict: !@method.nil?
             end
-          end
+          end.freeze
         end
 
         # Coerces the given value.
         #
-        # @param val [String] value to be coerced, in grape
-        #   this should always be a string.
+        # @param val [Object] value to be coerced
         # @return [Object,InvalidValue] the coerced result, or an instance
         #   of {InvalidValue} if the value could not be coerced.
         def call(val)
           # once the value is coerced by the custom method, its type should be checked
-          val = @method.call(val) if @method
+          candidate = @method ? @method.call(val) : val
 
           coerced_val = InvalidValue.new
 
           @type_coercers.each do |coercer|
-            coerced_val = coercer.call(val)
+            coerced_val = coercer.call(candidate)
 
             return coerced_val unless coerced_val.is_a?(InvalidValue)
           end

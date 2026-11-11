@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'dry_type_coercer'
-
 module Grape
   module Validations
     module Types
@@ -9,34 +7,30 @@ module Grape
       # initialization. When +strict+ is true, it doesn't coerce a value but check
       # that it has the proper type.
       class PrimitiveCoercer < DryTypeCoercer
-        MAPPING = {
-          Grape::API::Boolean => DryTypes::Params::Bool,
-          BigDecimal => DryTypes::Params::Decimal,
+        # The input classes Virtus refused for a given declared type, keyed by
+        # that type. Resolved once in #initialize rather than re-derived from
+        # +type+ on every value: the answer only ever depends on the
+        # declaration, and every coerced attribute of every request asks.
+        REJECTED_INPUTS = { String => [Array, Hash].freeze, Hash => [String].freeze }.freeze
 
-          # unfortunately, a +Params+ scope doesn't contain String
-          String => DryTypes::Coercible::String
-        }.freeze
-
-        STRICT_MAPPING = {
-          Grape::API::Boolean => DryTypes::Strict::Bool,
-          BigDecimal => DryTypes::Strict::Decimal
-        }.freeze
-
-        def initialize(type, strict = false)
+        def initialize(type, strict: false)
           super
 
-          @type = type
-
-          @coercer = if strict
-                       STRICT_MAPPING.fetch(type) { scope.const_get(type.name) }
-                     else
-                       MAPPING.fetch(type) { scope.const_get(type.name) }
-                     end
+          @coercer = cache_coercer[type]
+          @rejected_inputs = REJECTED_INPUTS[type]
+          @treat_empty_as_nil = type != String
+          @integer = type == Integer
         end
 
         def call(val)
+          # A value already of the declared type is what the dry-types coercer
+          # hands back for it -- the very same object, in both the params and
+          # the strict cache -- so the round trip through it only costs time.
+          # +instance_of?+ rather than +is_a?+: a subclass is not covered by
+          # that, and Coercible::String does rebuild one.
+          return val if val.instance_of?(@type)
           return InvalidValue.new if reject?(val)
-          return nil if val.nil? || treat_as_nil?(val)
+          return if val.nil? || treat_as_nil?(val)
 
           super
         end
@@ -50,16 +44,26 @@ module Grape
         # but Virtus wouldn't accept it. So, this method only exists to not introduce
         # breaking changes.
         def reject?(val)
-          (val.is_a?(Array) && type == String) ||
-            (val.is_a?(String) && type == Hash) ||
-            (val.is_a?(Hash) && type == String)
+          return fractional?(val) if @integer
+          return false unless @rejected_inputs
+
+          @rejected_inputs.any? { |klass| val.is_a?(klass) }
+        end
+
+        # dry-types turns a number into an Integer with Kernel#Integer, which
+        # truncates, so a JSON body's 2.99 became 2 while the same value in a
+        # query string, "2.99", was rejected. A number with a fractional part
+        # is refused instead; a whole one such as 1.0 still becomes 1. Complex
+        # numbers have no fractional part to test and are left to dry-types.
+        def fractional?(val)
+          val.is_a?(Numeric) && val.real? && !(val % 1).zero?
         end
 
         # Dry-Types treats an empty string as invalid. However, Grape considers an empty string as
         # absence of a value and coerces it into nil. See a discussion there
         # https://github.com/ruby-grape/grape/pull/2045
         def treat_as_nil?(val)
-          val == '' && type != String
+          @treat_empty_as_nil && val == ''
         end
       end
     end

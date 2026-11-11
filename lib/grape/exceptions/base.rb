@@ -3,83 +3,48 @@
 module Grape
   module Exceptions
     class Base < StandardError
-      BASE_MESSAGES_KEY = 'grape.errors.messages'
-      BASE_ATTRIBUTES_KEY = 'grape.errors.attributes'
-      FALLBACK_LOCALE = :en
+      include Grape::Util::Translation
 
-      attr_reader :status, :message, :headers
+      MESSAGE_STEPS = %w[problem summary resolution].to_h { |s| [s.to_sym, s.capitalize] }.freeze
 
-      def initialize(status: nil, message: nil, headers: nil, **_options)
+      attr_reader :status, :headers
+
+      def initialize(status: nil, message: nil, headers: nil)
+        super(message)
+
         @status  = status
-        @message = message
         @headers = headers
       end
 
       def [](index)
-        send index
+        __send__ index
       end
 
-      protected
+      private
 
-      # TODO: translate attribute first
-      # if BASE_ATTRIBUTES_KEY.key respond to a string message, then short_message is returned
-      # if BASE_ATTRIBUTES_KEY.key respond to a Hash, means it may have problem , summary and resolution
-      def compose_message(key, **attributes)
-        short_message = translate_message(key, **attributes)
-        if short_message.is_a? Hash
-          @problem = problem(key, **attributes)
-          @summary = summary(key, **attributes)
-          @resolution = resolution(key, **attributes)
-          [['Problem', @problem], ['Summary', @summary], ['Resolution', @resolution]].each_with_object(+'') do |detail_array, message|
-            message << "\n#{detail_array[0]}:\n  #{detail_array[1]}" unless detail_array[1].blank?
-            message
-          end
-        else
-          short_message
-        end
+      def compose_message(key, **)
+        short_message = translate_message(key, **)
+        return short_message unless short_message.is_a?(Hash)
+
+        MESSAGE_STEPS.filter_map do |step, label|
+          next unless short_message.key?(step)
+
+          detail = translate_message(:"#{key}.#{step}", **)
+          "\n#{label}:\n  #{detail}" if detail.present?
+        end.join
       end
 
-      def problem(key, **attributes)
-        translate_message("#{key}.problem".to_sym, **attributes)
-      end
-
-      def summary(key, **attributes)
-        translate_message("#{key}.summary".to_sym, **attributes)
-      end
-
-      def resolution(key, **attributes)
-        translate_message("#{key}.resolution".to_sym, **attributes)
-      end
-
-      def translate_attributes(keys, **options)
-        keys.map do |key|
-          translate("#{BASE_ATTRIBUTES_KEY}.#{key}", default: key, **options)
-        end.join(', ')
-      end
-
-      def translate_message(key, **options)
-        case key
+      def translate_message(translation_key, **)
+        case translation_key
         when Symbol
-          translate("#{BASE_MESSAGES_KEY}.#{key}", default: '', **options)
+          translate(translation_key, **)
+        when Hash
+          translation_key => { key:, **opts }
+          translate(key, **opts)
         when Proc
-          key.call
+          translation_key.call
         else
-          key
-        end
-      end
-
-      def translate(key, **options)
-        options = options.dup
-        options[:default] &&= options[:default].to_s
-        message = ::I18n.translate(key, **options)
-        message.present? ? message : fallback_message(key, **options)
-      end
-
-      def fallback_message(key, **options)
-        if ::I18n.enforce_available_locales && !::I18n.available_locales.include?(FALLBACK_LOCALE)
-          key
-        else
-          ::I18n.translate(key, locale: FALLBACK_LOCALE, **options)
+          translation_key
         end
       end
     end

@@ -2,34 +2,18 @@
 
 module Grape
   module ErrorFormatter
-    extend Util::Registrable
+    extend Grape::Util::Registry
 
-    class << self
-      def builtin_formatters
-        @builtin_formatters ||= {
-          serializable_hash: Grape::ErrorFormatter::Json,
-          json: Grape::ErrorFormatter::Json,
-          jsonapi: Grape::ErrorFormatter::Json,
-          txt: Grape::ErrorFormatter::Txt,
-          xml: Grape::ErrorFormatter::Xml
-        }
-      end
+    module_function
 
-      def formatters(**options)
-        builtin_formatters.merge(default_elements).merge!(options[:error_formatters] || {})
-      end
+    # Answers nil when nothing is registered for the format, the way
+    # +Parser.parser_for+ does. What to fall back to then is the API's own
+    # +default_error_formatter+, which is the caller's state rather than the
+    # registry's: +Middleware::Error+ holds it and applies it.
+    def formatter_for(format, error_formatters = nil)
+      return error_formatters[format] if error_formatters&.key?(format)
 
-      def formatter_for(api_format, **options)
-        spec = formatters(**options)[api_format]
-        case spec
-        when nil
-          options[:default_error_formatter] || Grape::ErrorFormatter::Txt
-        when Symbol
-          method(spec)
-        else
-          spec
-        end
-      end
+      registry[format]
     end
   end
 end

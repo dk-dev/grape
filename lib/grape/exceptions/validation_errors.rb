@@ -1,33 +1,13 @@
 # frozen_string_literal: true
 
-require 'grape/exceptions/base'
-
 module Grape
   module Exceptions
-    class ValidationErrors < Grape::Exceptions::Base
-      ERRORS_FORMAT_KEY = 'grape.errors.format'
-      DEFAULT_ERRORS_FORMAT = '%{attributes} %{message}'
-
-      include Enumerable
-
+    class ValidationErrors < Base
       attr_reader :errors
 
-      def initialize(errors: [], headers: {}, **_options)
-        @errors = {}
-        errors.each do |validation_error|
-          @errors[validation_error.params] ||= []
-          @errors[validation_error.params] << validation_error
-        end
-
-        super message: full_messages.join(', '), status: 400, headers: headers
-      end
-
-      def each
-        errors.each_pair do |attribute, errors|
-          errors.each do |error|
-            yield attribute, error
-          end
-        end
+      def initialize(exceptions: [], headers: {})
+        @errors = exceptions.flat_map(&:errors).group_by(&:params)
+        super(message: full_messages.join(', '), status: 400, headers:)
       end
 
       def as_json(**_opts)
@@ -43,17 +23,35 @@ module Grape
         as_json.to_json
       end
 
+      # Translated once, when the error is built for its #message, and handed
+      # out as a copy from then on. Every lookup here is an I18n call of a few
+      # microseconds, and the README's recipe for answering with the list,
+      # +error!({ messages: e.full_messages }, 400)+, asked for all of them a
+      # second time. It also keeps the list the same as #message, which was
+      # already fixed at that point, if the locale changes in between.
       def full_messages
-        messages = map do |attributes, error|
-          I18n.t(
-            ERRORS_FORMAT_KEY,
-            default: DEFAULT_ERRORS_FORMAT,
-            attributes: translate_attributes(attributes),
-            message: error.message
-          )
+        (@full_messages ||= translate_full_messages).dup
+      end
+
+      private
+
+      # Every message shares one format and every error of a group its
+      # attribute names, so each is looked up once and only the interpolation,
+      # which is what I18n would end with anyway, runs per message.
+      def translate_full_messages
+        template = translate(:format, scope: 'grape.errors', default: '%<attributes>s %<message>s')
+        messages = errors.flat_map do |keys, errs|
+          attributes = translate_attributes(keys)
+          errs.map { |error| ::I18n.interpolate(template, attributes:, message: error.message) }
         end
         messages.uniq!
         messages
+      end
+
+      def translate_attributes(keys)
+        keys.map do |key|
+          translate(key, scope: 'grape.errors.attributes', default: key.to_s)
+        end.join(', ')
       end
     end
   end

@@ -1,70 +1,75 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
+describe Grape::DSL::Validations do
+  subject { dummy_class }
 
-module Grape
-  module DSL
-    module ValidationsSpec
-      class Dummy
-        include Grape::DSL::Validations
+  let(:dummy_class) do
+    Class.new do
+      extend Grape::DSL::Settings
+      extend Grape::DSL::Validations
+    end
+  end
+
+  describe '.params' do
+    subject { dummy_class.params { :my_block } }
+
+    it 'creates a proper Grape::Validations::ParamsScope' do
+      expect(Grape::Validations::ParamsScope).to receive(:new).with(api: dummy_class, type: Hash) do |_func, &block|
+        expect(block.call).to eq(:my_block)
+      end.and_return(:param_scope)
+      expect(subject).to eq(:param_scope)
+    end
+  end
+
+  describe '.contract' do
+    context 'when contract is nil and blockless' do
+      it 'raises an ArgumentError' do
+        expect { dummy_class.contract }.to raise_error(ArgumentError, 'either contract or block must be provided')
       end
     end
 
-    describe Validations do
-      subject { ValidationsSpec::Dummy }
+    context 'when contract is nil and but a block is provided' do
+      it 'returns a proper rape::Validations::ContractScope' do
+        expect(Grape::Validations::ContractScope).to receive(:new).with(dummy_class, nil) do |_func, &block|
+          expect(block.call).to eq(:my_block)
+        end.and_return(:my_contract_scope)
 
-      describe '.reset_validations!' do
-        before do
-          subject.namespace_stackable :declared_params, ['dummy']
-          subject.namespace_stackable :validations, ['dummy']
-          subject.namespace_stackable :params, ['dummy']
-          subject.route_setting :description, description: 'lol', params: ['dummy']
-          subject.reset_validations!
-        end
+        expect(dummy_class.contract { :my_block }).to eq(:my_contract_scope)
+      end
+    end
 
-        after do
-          subject.unset_route_setting :description
-        end
+    context 'when contract is present and blockless' do
+      subject { dummy_class.contract(:my_contract) }
 
-        it 'resets declared params' do
-          expect(subject.namespace_stackable(:declared_params)).to eq []
-        end
+      before do
+        allow(Grape::Validations::ContractScope).to receive(:new).with(dummy_class, :my_contract).and_return(:my_contract_scope)
+      end
 
-        it 'resets validations' do
-          expect(subject.namespace_stackable(:validations)).to eq []
-        end
+      it { is_expected.to eq(:my_contract_scope) }
+    end
 
-        it 'resets params' do
-          expect(subject.namespace_stackable(:params)).to eq []
-        end
+    context 'when contract and block are provided' do
+      context 'when contract does not respond to schema' do
+        let(:my_contract) { Class.new }
 
-        it 'resets documentation params' do
-          expect(subject.route_setting(:description)[:params]).to be_nil
-        end
+        it 'returns a proper rape::Validations::ContractScope' do
+          expect(Grape::Validations::ContractScope).to receive(:new).with(dummy_class, my_contract) do |_func, &block|
+            expect(block.call).to eq(:my_block)
+          end.and_return(:my_contract_scope)
 
-        it 'does not reset documentation description' do
-          expect(subject.route_setting(:description)[:description]).to eq 'lol'
+          expect(dummy_class.contract(my_contract.new) { :my_block }).to eq(:my_contract_scope)
         end
       end
 
-      describe '.params' do
-        it 'returns a ParamsScope' do
-          expect(subject.params).to be_a Grape::Validations::ParamsScope
+      context 'when contract responds to schema' do
+        let(:my_contract) do
+          Class.new do
+            def schema; end
+          end
         end
 
-        it 'evaluates block' do
-          expect { subject.params { raise 'foo' } }.to raise_error RuntimeError, 'foo'
-        end
-      end
-
-      describe '.document_attribute' do
-        before do
-          subject.document_attribute([full_name: 'xxx'], foo: 'bar')
-        end
-
-        it 'creates a param documentation' do
-          expect(subject.namespace_stackable(:params)).to eq(['xxx' => { foo: 'bar' }])
-          expect(subject.route_setting(:description)).to eq(params: { 'xxx' => { foo: 'bar' } })
+        it 'raises an ArgumentError' do
+          expect { dummy_class.contract(my_contract.new) { :my_block } }.to raise_error(ArgumentError, 'cannot inherit from contract, only schema')
         end
       end
     end

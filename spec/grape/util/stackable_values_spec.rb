@@ -1,127 +1,107 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
-module Grape
-  module Util
-    describe StackableValues do
-      let(:parent) { StackableValues.new }
-      subject { StackableValues.new(parent) }
+describe Grape::Util::StackableValues do
+  subject { described_class.new(new_values, parent) }
 
-      describe '#keys' do
-        it 'returns all keys' do
-          subject[:some_thing] = :foo_bar
-          subject[:some_thing_else] = :foo_bar
-          expect(subject.keys).to eq %i[some_thing some_thing_else].sort
-        end
+  let(:parent_values) { {} }
+  let(:new_values) { {} }
+  let(:parent) { described_class.new(parent_values, {}) }
 
-        it 'returns merged keys with parent' do
-          parent[:some_thing] = :foo
-          parent[:some_thing_else] = :foo
+  describe '#keys' do
+    it 'returns all keys' do
+      new_values[:some_thing] = [:foo_bar]
+      new_values[:some_thing_else] = [:foo_bar]
+      expect(subject.keys).to eq %i[some_thing some_thing_else]
+    end
 
-          subject[:some_thing] = :foo_bar
-          subject[:some_thing_more] = :foo_bar
+    it 'returns merged keys with parent' do
+      parent_values[:some_thing] = [:foo]
+      parent_values[:some_thing_else] = [:foo]
 
-          expect(subject.keys).to eq %i[some_thing some_thing_else some_thing_more].sort
-        end
+      new_values[:some_thing] = [:foo_bar]
+      new_values[:some_thing_more] = [:foo_bar]
+
+      expect(subject.keys).to eq %i[some_thing some_thing_else some_thing_more]
+    end
+  end
+
+  describe '#[]' do
+    it 'returns an array of values' do
+      new_values[:some_thing] = [:foo]
+      expect(subject[:some_thing]).to eq [:foo]
+    end
+
+    it 'returns a frozen empty array when nothing is registered' do
+      expect(subject[:some_thing]).to eq []
+      expect(subject[:some_thing]).to be_frozen
+    end
+
+    it 'returns parent value when no value is set' do
+      parent_values[:some_thing] = [:foo]
+      expect(subject[:some_thing]).to eq [:foo]
+    end
+
+    it 'combines parent and actual values, outermost scope first' do
+      parent_values[:some_thing] = [:foo]
+      new_values[:some_thing] = [:foo_bar]
+      expect(subject[:some_thing]).to eq %i[foo foo_bar]
+    end
+
+    it 'does not change parent values' do
+      parent_values[:some_thing] = [:foo]
+      new_values[:some_thing] = [:foo_bar]
+      expect(parent[:some_thing]).to eq [:foo]
+    end
+  end
+
+  describe '#to_hash' do
+    it 'returns a Hash representation' do
+      parent_values[:some_thing] = [:foo]
+      new_values[:some_thing] = [%i[bar more]]
+      new_values[:some_thing_more] = [:foo_bar]
+      expect(subject.to_hash).to eq(some_thing: [:foo, %i[bar more]], some_thing_more: [:foo_bar])
+    end
+  end
+
+  describe 'the view built by Grape::Util::InheritableSetting' do
+    let(:root) { Grape::Util::InheritableSetting.new }
+    let(:child) { Grape::Util::InheritableSetting.new.tap { |setting| setting.inherit_from(root) } }
+
+    it 'exposes each scope own registrations through #new_values' do
+      root.add_helper(:outer)
+      child.add_helper(:inner)
+
+      expect(child.namespace_stackable.new_values).to eq(helpers: [:inner])
+      expect(child.namespace_stackable.inherited_values.new_values).to eq(helpers: [:outer])
+    end
+
+    it 'leaves #new_values nil for a scope which registered nothing' do
+      expect(child.namespace_stackable.new_values).to be_nil
+    end
+
+    it 'terminates the inherited_values chain at the root scope' do
+      views = []
+      view = child.namespace_stackable
+      while view.is_a?(described_class)
+        views << view
+        view = view.inherited_values
       end
 
-      describe '#delete' do
-        it 'deletes a key' do
-          subject[:some_thing] = :new_foo_bar
-          subject.delete :some_thing
-          expect(subject[:some_thing]).to eq []
-        end
+      expect(views.size).to eq 2
+      expect(view).to eq({})
+    end
 
-        it 'does not delete parent values' do
-          parent[:some_thing] = :foo
-          subject[:some_thing] = :new_foo_bar
-          subject.delete :some_thing
-          expect(subject[:some_thing]).to eq [:foo]
-        end
-      end
+    it 'reads registrations across the chain, outermost scope first' do
+      root.add_helper(:outer)
+      child.add_helper(:inner)
 
-      describe '#[]' do
-        it 'returns an array of values' do
-          subject[:some_thing] = :foo
-          expect(subject[:some_thing]).to eq [:foo]
-        end
+      expect(child.namespace_stackable[:helpers]).to eq %i[outer inner]
+    end
 
-        it 'returns parent value when no value is set' do
-          parent[:some_thing] = :foo
-          expect(subject[:some_thing]).to eq [:foo]
-        end
+    it 'is a view rather than the store, so writes to it register nothing' do
+      child.namespace_stackable.new_values&.[]=(:helpers, [:ignored])
 
-        it 'combines parent and actual values' do
-          parent[:some_thing] = :foo
-          subject[:some_thing] = :foo_bar
-          expect(subject[:some_thing]).to eq %i[foo foo_bar]
-        end
-
-        it 'parent values are not changed' do
-          parent[:some_thing] = :foo
-          subject[:some_thing] = :foo_bar
-          expect(parent[:some_thing]).to eq [:foo]
-        end
-      end
-
-      describe '#[]=' do
-        it 'sets a value' do
-          subject[:some_thing] = :foo
-          expect(subject[:some_thing]).to eq [:foo]
-        end
-
-        it 'pushes further values' do
-          subject[:some_thing] = :foo
-          subject[:some_thing] = :bar
-          expect(subject[:some_thing]).to eq %i[foo bar]
-        end
-
-        it 'can handle array values' do
-          subject[:some_thing] = :foo
-          subject[:some_thing] = %i[bar more]
-          expect(subject[:some_thing]).to eq [:foo, %i[bar more]]
-
-          parent[:some_thing_else] = %i[foo bar]
-          subject[:some_thing_else] = %i[some bar foo]
-
-          expect(subject[:some_thing_else]).to eq [%i[foo bar], %i[some bar foo]]
-        end
-      end
-
-      describe '#to_hash' do
-        it 'returns a Hash representation' do
-          parent[:some_thing] = :foo
-          subject[:some_thing] = %i[bar more]
-          subject[:some_thing_more] = :foo_bar
-          expect(subject.to_hash).to eq(some_thing: [:foo, %i[bar more]], some_thing_more: [:foo_bar])
-        end
-      end
-
-      describe '#clone' do
-        let(:obj_cloned) { subject.clone }
-        it 'copies all values' do
-          parent = StackableValues.new
-          child = StackableValues.new parent
-          grandchild = StackableValues.new child
-
-          parent[:some_thing] = :foo
-          child[:some_thing] = %i[bar more]
-          grandchild[:some_thing] = :grand_foo_bar
-          grandchild[:some_thing_more] = :foo_bar
-
-          expect(grandchild.clone.to_hash).to eq(some_thing: [:foo, %i[bar more], :grand_foo_bar], some_thing_more: [:foo_bar])
-        end
-
-        context 'complex (i.e. not primitive) data types (ex. middleware, please see bug #930)' do
-          let(:middleware) { double }
-
-          before { subject[:middleware] = middleware }
-
-          it 'copies values; does not duplicate them' do
-            expect(obj_cloned[:middleware]).to eq [middleware]
-          end
-        end
-      end
+      expect(child.helpers).to eq []
     end
   end
 end

@@ -1,228 +1,198 @@
 # frozen_string_literal: true
 
-require 'active_support/concern'
-
 module Grape
   module DSL
     module Routing
-      extend ActiveSupport::Concern
-      include Grape::DSL::Configuration
+      attr_reader :endpoints
 
-      module ClassMethods
-        attr_reader :endpoints
+      # Define a root URL prefix for your entire API.
+      def prefix(prefix = nil)
+        return inheritable_setting.root_prefix if prefix.nil?
 
-        # Specify an API version.
-        #
-        # @example API with legacy support.
-        #   class MyAPI < Grape::API
-        #     version 'v2'
-        #
-        #     get '/main' do
-        #       {some: 'data'}
-        #     end
-        #
-        #     version 'v1' do
-        #       get '/main' do
-        #         {legacy: 'data'}
-        #       end
-        #     end
-        #   end
-        #
-        def version(*args, &block)
-          if args.any?
-            options = args.extract_options!
-            options = options.reverse_merge(using: :path)
-            requested_versions = args.flatten
+        inheritable_setting.root_prefix = prefix.to_s
+      end
 
-            raise Grape::Exceptions::MissingVendorOption.new if options[:using] == :header && !options.key?(:vendor)
+      # Create a scope without affecting the URL.
+      #
+      # @param _name [Symbol] Purely placebo, just allows to name the scope to
+      # make the code more readable.
+      def scope(_name = nil, &block)
+        within_namespace { nest(block) }
+      end
 
-            @versions = versions | requested_versions
+      def build_with(build_with)
+        inheritable_setting.build_params_with = build_with
+      end
 
-            if block
-              within_namespace do
-                namespace_inheritable(:version, requested_versions)
-                namespace_inheritable(:version_options, options)
+      # Do not route HEAD requests to GET requests automatically.
+      def do_not_route_head!
+        inheritable_setting.do_not_route_head!
+      end
 
-                instance_eval(&block)
-              end
-            else
-              namespace_inheritable(:version, requested_versions)
-              namespace_inheritable(:version_options, options)
-            end
-          end
+      # Do not automatically route OPTIONS.
+      def do_not_route_options!
+        inheritable_setting.do_not_route_options!
+      end
 
-          @versions.last if instance_variable_defined?(:@versions) && @versions
+      def lint!
+        inheritable_setting.lint!
+      end
+
+      def do_not_document!
+        inheritable_setting.do_not_document!
+      end
+
+      # Defines a route that will be recognized
+      # by the Grape API.
+      #
+      # @param methods [HTTP Verb] One or more HTTP verbs that are accepted by this route. Set to `:any` if you want any verb to be accepted.
+      # @param paths [String] One or more strings representing the URL segment(s) for this route.
+      # @param requirements [Hash] Regular-expression constraints for named path params; the route matches only when every requirement is satisfied.
+      # @param anchor [Boolean] Whether the route is anchored to the whole path. Defaults to `true`; pass `false` for catch-all routes (e.g. `'/(*:path)'`).
+      # @param route_options [Hash] Any additional custom options, carried through to `route.options`.
+      #
+      # @example Defining a basic route.
+      #   class MyAPI < Grape::API
+      #     route(:any, '/hello') do
+      #       {hello: 'world'}
+      #     end
+      #   end
+      def route(methods, paths = ['/'], requirements: nil, anchor: true, **route_options, &)
+        validate_requirements!(requirements)
+
+        http_methods = methods == :any ? '*' : methods
+        endpoint_description = inheritable_setting.route_description
+
+        # +params+, +requirements+ and +anchor+ each travel as their own endpoint
+        # input; the route-options bag keeps the description's other keys
+        # (+success+, +tags+, …) plus any custom options.
+        new_endpoint = Grape::Endpoint.new(
+          inheritable_setting,
+          http_methods:,
+          path: paths,
+          api: self,
+          params: prepare_params(endpoint_description[:params]),
+          requirements:,
+          anchor:,
+          route_options: prepare_route_options(endpoint_description, route_options),
+          &
+        )
+        endpoints << new_endpoint unless endpoints.include?(new_endpoint)
+
+        inheritable_setting.route_end
+        reset_validations!
+      end
+
+      Grape::HTTP_SUPPORTED_METHODS.each do |supported_method|
+        define_method supported_method.downcase do |path = '/', **options, &block|
+          route(supported_method, path, **options, &block)
         end
+      end
 
-        # Define a root URL prefix for your entire API.
-        def prefix(prefix = nil)
-          namespace_inheritable(:root_prefix, prefix)
-        end
+      # Declare a "namespace", which prefixes all subordinate routes with its
+      # name. Any endpoints within a namespace, group, resource or segment,
+      # etc., will share their parent context as well as any configuration
+      # done in the namespace context.
+      #
+      # @example
+      #
+      #     namespace :foo do
+      #       get 'bar' do
+      #         # defines the endpoint: GET /foo/bar
+      #       end
+      #     end
+      def namespace(space = nil, requirements: nil, **, &block)
+        return inheritable_setting.namespace_path unless space || block
 
-        # Create a scope without affecting the URL.
-        #
-        # @param _name [Symbol] Purely placebo, just allows to name the scope to
-        # make the code more readable.
-        def scope(_name = nil, &block)
-          within_namespace do
-            nest(block)
-          end
-        end
+        validate_requirements!(requirements)
 
-        # Do not route HEAD requests to GET requests automatically.
-        def do_not_route_head!
-          namespace_inheritable(:do_not_route_head, true)
-        end
-
-        # Do not automatically route OPTIONS.
-        def do_not_route_options!
-          namespace_inheritable(:do_not_route_options, true)
-        end
-
-        def mount(mounts, *opts)
-          mounts = { mounts => '/' } unless mounts.respond_to?(:each_pair)
-          mounts.each_pair do |app, path|
-            if app.respond_to?(:mount_instance)
-              opts_with = opts.any? ? opts.shift[:with] : {}
-              mount({ app.mount_instance(configuration: opts_with) => path })
-              next
-            end
-            in_setting = inheritable_setting
-
-            if app.respond_to?(:inheritable_setting, true)
-              mount_path = Grape::Router.normalize_path(path)
-              app.top_level_setting.namespace_stackable[:mount_path] = mount_path
-
-              app.inherit_settings(inheritable_setting)
-
-              in_setting = app.top_level_setting
-
-              app.change!
-              change!
-            end
-
-            endpoints << Grape::Endpoint.new(
-              in_setting,
-              method: :any,
-              path: path,
-              app: app,
-              route_options: { anchor: false },
-              forward_match: !app.respond_to?(:inheritable_setting),
-              for: self
-            )
-          end
-        end
-
-        # Defines a route that will be recognized
-        # by the Grape API.
-        #
-        # @param methods [HTTP Verb] One or more HTTP verbs that are accepted by this route. Set to `:any` if you want any verb to be accepted.
-        # @param paths [String] One or more strings representing the URL segment(s) for this route.
-        #
-        # @example Defining a basic route.
-        #   class MyAPI < Grape::API
-        #     route(:any, '/hello') do
-        #       {hello: 'world'}
-        #     end
-        #   end
-        def route(methods, paths = ['/'], route_options = {}, &block)
-          methods = '*' if methods == :any
-          endpoint_options = {
-            method: methods,
-            path: paths,
-            for: self,
-            route_options: {
-              params: namespace_stackable_with_hash(:params) || {}
-            }.deep_merge(route_setting(:description) || {}).deep_merge(route_options || {})
-          }
-
-          new_endpoint = Grape::Endpoint.new(inheritable_setting, endpoint_options, &block)
-          endpoints << new_endpoint unless endpoints.any? { |e| e.equals?(new_endpoint) }
-
-          route_end
-          reset_validations!
-        end
-
-        Grape::Http::Headers::SUPPORTED_METHODS.each do |supported_method|
-          define_method supported_method.downcase do |*args, &block|
-            options = args.extract_options!
-            paths = args.first || ['/']
-            route(supported_method, paths, options, &block)
+        within_namespace do
+          nest(block) do
+            inheritable_setting.add_namespace(Grape::Namespace.new(space, requirements:, **)) if space
           end
         end
+      end
 
-        # Declare a "namespace", which prefixes all subordinate routes with its
-        # name. Any endpoints within a namespace, group, resource or segment,
-        # etc., will share their parent context as well as any configuration
-        # done in the namespace context.
-        #
-        # @example
-        #
-        #     namespace :foo do
-        #       get 'bar' do
-        #         # defines the endpoint: GET /foo/bar
-        #       end
-        #     end
-        def namespace(space = nil, options = {}, &block)
-          @namespace_description = nil unless instance_variable_defined?(:@namespace_description) && @namespace_description
+      alias group namespace
+      alias resource namespace
+      alias resources namespace
+      alias segment namespace
 
-          if space || block
-            within_namespace do
-              previous_namespace_description = @namespace_description
-              @namespace_description = (@namespace_description || {}).deep_merge(namespace_setting(:description) || {})
-              nest(block) do
-                namespace_stackable(:namespace, Namespace.new(space, **options)) if space
-              end
-              @namespace_description = previous_namespace_description
-            end
-          else
-            Namespace.joined_space_path(namespace_stackable(:namespace))
-          end
-        end
+      # An array of API routes.
+      def routes
+        @routes ||= endpoints.flat_map(&:routes)
+      end
 
-        alias group namespace
-        alias resource namespace
-        alias resources namespace
-        alias segment namespace
+      # This method allows you to quickly define a parameter route segment
+      # in your API.
+      #
+      # @param param [Symbol] The name of the parameter you wish to declare.
+      # @param requirements [Regexp, Class, Symbol] The constraint the parameter must meet.
+      # @param type [Class] Declares the parameter with this type.
+      def route_param(param, requirements: nil, type: nil, **, &)
+        # The param is named here, so the constraint is its own: nest whatever
+        # it is, not just a Regexp. A Hash would name the param twice, or key a
+        # capture this namespace does not introduce, and belongs on +namespace+.
+        raise ArgumentError, "route_param :`#{param}` constrains :`#{param}`; pass the constraint itself, or a Hash of requirements to the enclosing namespace" if requirements.respond_to?(:to_hash)
 
-        # An array of API routes.
-        def routes
-          @routes ||= prepare_routes
-        end
+        param_requirements = requirements ? { param.to_sym => requirements } : requirements
 
-        # Remove all defined routes.
-        def reset_routes!
-          endpoints.each(&:reset_routes!)
-          @routes = nil
-        end
+        Grape::Validations::ParamsScope.new(api: self) do
+          requires param, type: type
+        end if type
 
-        def reset_endpoints!
-          @endpoints = []
-        end
+        namespace(":#{param}", requirements: param_requirements, **, &)
+      end
 
-        # This method allows you to quickly define a parameter route segment
-        # in your API.
-        #
-        # @param param [Symbol] The name of the parameter you wish to declare.
-        # @option options [Regexp] You may supply a regular expression that the declared parameter must meet.
-        def route_param(param, options = {}, &block)
-          options = options.dup
+      private
 
-          options[:requirements] = {
-            param.to_sym => options[:requirements]
-          } if options[:requirements].is_a?(Regexp)
+      # Requirements are keyed by param name and merged across namespaces, so
+      # anything else has nothing to attach to. Rejected here rather than at
+      # the merge, which runs on the first request that builds the routes.
+      def validate_requirements!(requirements)
+        return if requirements.nil? || requirements.respond_to?(:to_hash)
 
-          Grape::Validations::ParamsScope.new(api: self) do
-            requires param, type: options[:type]
-          end if options.key?(:type)
+        raise ArgumentError, "requirements must be a Hash of param name => constraint, got `#{requirements.class}`"
+      end
 
-          namespace(":#{param}", options, &block)
-        end
+      # Compose a route's params: the declared params (+params do … end+) deep-merged
+      # with any documented alongside +desc ..., params:+ (+description_params+).
+      def prepare_params(description_params)
+        endpoint_params = inheritable_setting.params_documentation || {}
+        return endpoint_params if description_params.blank?
 
-        # @return array of defined versions
-        def versions
-          @versions ||= []
-        end
+        endpoint_params.deep_merge(description_params)
+      end
+
+      # The route's description (+desc+) less its +params+, with any custom
+      # +route_options+ deep-merged over it.
+      def prepare_route_options(description, route_options)
+        description_options = description.except(:params)
+        return description_options if route_options.empty?
+
+        description_options.deep_merge!(route_options)
+      end
+
+      # Remove all defined routes.
+      def reset_routes!
+        endpoints.each(&:reset_routes!)
+        @routes = nil
+      end
+
+      def reset_endpoints!
+        @endpoints = []
+      end
+
+      # Execute first the provided block, then each of the
+      # block passed in. Allows for simple 'before' setups
+      # of settings stack pushes.
+      def nest(*blocks, &block)
+        blocks.compact!
+        return instance_eval(&block) if blocks.empty?
+
+        evaluate_as_instance_with_configuration(block) if block
+        blocks.each { |b| evaluate_as_instance_with_configuration(b) }
+        reset_validations!
       end
     end
   end

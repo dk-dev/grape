@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
-
 describe Rack::Sendfile do
   subject do
     content_object = file_object
     app = Class.new(Grape::API) do
-      use Rack::Sendfile
+      use Rack::Sendfile, 'X-Accel-Redirect'
       format :json
       get do
         if content_object.is_a?(String)
@@ -18,8 +16,7 @@ describe Rack::Sendfile do
     end
 
     options = {
-      method: 'GET',
-      'HTTP_X_SENDFILE_TYPE' => 'X-Accel-Redirect',
+      method: Rack::GET,
       'HTTP_X_ACCEL_MAPPING' => '/accel/mapping/=/replaced/'
     }
     env = Rack::MockRequest.env_for('/', options)
@@ -39,12 +36,12 @@ describe Rack::Sendfile do
 
   context 'when streaming non file content' do
     let(:file_object) do
-      double(:file_object, each: nil)
+      instance_double(Enumerator, each: nil)
     end
 
     it 'not contains Sendfile headers' do
       headers = subject[1]
-      expect(headers).to_not include('X-Accel-Redirect')
+      expect(headers).not_to include('X-Accel-Redirect')
     end
   end
 end

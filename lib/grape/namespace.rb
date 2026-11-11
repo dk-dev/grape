@@ -1,28 +1,20 @@
 # frozen_string_literal: true
 
-require 'grape/util/cache'
-
 module Grape
   # A container for endpoints or other namespaces, which allows for both
   # logical grouping of endpoints as well as sharing common configuration.
   # May also be referred to as group, segment, or resource.
   class Namespace
-    attr_reader :space, :options
+    attr_reader :space, :requirements, :options
 
     # @param space [String] the name of this namespace
+    # @param requirements [Hash] param-regex pairs a request's path must meet
+    #   for this namespace's endpoints to match
     # @param options [Hash] options hash
-    # @option options :requirements [Hash] param-regex pairs, all of which must
-    #   be met by a request's params for all endpoints in this namespace, or
-    #   validation will fail and return a 422.
-    def initialize(space, **options)
+    def initialize(space, requirements: nil, **options)
       @space = space.to_s
+      @requirements = requirements
       @options = options
-    end
-
-    # Retrieves the requirements from the options hash, if given.
-    # @return [Hash]
-    def requirements
-      options[:requirements] || {}
     end
 
     # (see ::joined_space_path)
@@ -30,16 +22,30 @@ module Grape
       settings&.map(&:space)
     end
 
-    # Join the namespaces from a list of settings to create a path prefix.
-    # @param settings [Array] list of Grape::Util::InheritableSettings.
+    def ==(other)
+      other.class == self.class &&
+        other.space == space &&
+        other.requirements == requirements &&
+        other.options == options
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, space, requirements, options].hash
+    end
+
+    # Join the namespaces from a list of Namespace objects to create a path
+    # prefix.
+    # @param settings [Array] list of Grape::Namespace objects.
     def self.joined_space_path(settings)
-      Grape::Router.normalize_path(JoinedSpaceCache[joined_space(settings)])
+      JoinedSpaceCache[joined_space(settings)]
     end
 
     class JoinedSpaceCache < Grape::Util::Cache
       def initialize
+        super
         @cache = Hash.new do |h, joined_space|
-          h[joined_space] = -joined_space.join('/')
+          h[joined_space] = Grape::Util::PathNormalizer.call(joined_space.join('/'))
         end
       end
     end

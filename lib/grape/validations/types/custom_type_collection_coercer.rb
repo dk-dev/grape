@@ -4,7 +4,7 @@ module Grape
   module Validations
     module Types
       # See {CustomTypeCoercer} for details on types
-      # that will be supported by this by this coercer.
+      # that will be supported by this coercer.
       # This coercer works in the same way as +CustomTypeCoercer+
       # except that it expects to receive an array of strings to
       # coerce and will return an array (or optionally, a set)
@@ -29,7 +29,7 @@ module Grape
         # @param set [Boolean]
         #   when true, a +Set+ will be returned by {#call} instead
         #   of an +Array+ and duplicate items will be discarded.
-        def initialize(type, set = false)
+        def initialize(type, set: false)
           super(type)
           @set = set
         end

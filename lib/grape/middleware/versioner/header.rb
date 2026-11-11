@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require 'grape/middleware/base'
-require 'grape/middleware/versioner/parse_media_type_patch'
-
 module Grape
   module Middleware
     module Versioner
@@ -25,176 +22,141 @@ module Grape
       # X-Cascade header to alert Grape::Router to attempt the next matched
       # route.
       class Header < Base
-        VENDOR_VERSION_HEADER_REGEX =
-          /\Avnd\.([a-z0-9.\-_!#{Regexp.last_match(0)}\^]+?)(?:-([a-z0-9*.]+))?(?:\+([a-z0-9*\-.]+))?\z/.freeze
+        # Accept headers answered up front besides the declared media types:
+        # +*/*+, what curl, Net::HTTP and most HTTP libraries send unless told
+        # otherwise, and no Accept header at all.
+        COMMON_ACCEPT_HEADERS = ['*/*', nil].freeze
 
-        HAS_VENDOR_REGEX = /\Avnd\.[a-z0-9.\-_!#{Regexp.last_match(0)}\^]+/.freeze
-        HAS_VERSION_REGEX = /\Avnd\.([a-z0-9.\-_!#{Regexp.last_match(0)}\^]+?)(?:-([a-z0-9*.]+))+/.freeze
+        # +MediaType.best_quality+ answers from the header and
+        # +available_media_types+ alone, and the latter is fixed once the
+        # middleware is built. Most requests send one of a handful of headers --
+        # a declared media type spelled as declared (+application/vnd.acme-v1+json+)
+        # or one of COMMON_ACCEPT_HEADERS -- so their answers are worked out
+        # once instead of re-running Rack's q-value match and a parse on every
+        # request. Any other header (a q-value list, another casing) is not a
+        # key and takes the full path, so a client cannot grow a table.
+        #
+        # Shared per vendor and list: every endpoint builds its own versioner,
+        # and all of an API's declare the same media types. The list in the
+        # key is a frozen copy, as the middleware's own list stays reachable
+        # through +available_media_types+.
+        class MediaTypeForAcceptCache < Grape::Util::Cache
+          def initialize
+            super
+            @cache = Hash.new do |h, (vendor, available_media_types)|
+              declared = available_media_types.map(&:-@).freeze
+              h[[vendor, declared].freeze] = [*declared, *COMMON_ACCEPT_HEADERS].to_h do |accept|
+                [accept, Grape::Util::MediaType.best_quality(accept, declared, vendor:)]
+              end.compact.freeze
+            end
+          end
+        end
+
+        def initialize(app, **options)
+          super
+          @media_type_for_accept = MediaTypeForAcceptCache[[vendor, available_media_types]]
+        end
+
+        # Base#call copies the middleware per request so #before can keep the
+        # env and the Accept header it scrubs in ivars. A request whose Accept
+        # header the table answers (see MediaTypeForAcceptCache) needs neither
+        # unless the API is strict, whose checks read the header itself: its
+        # media type is recorded and the app called from the one instance the
+        # stack built. Any other request goes through #before.
+        def call(env)
+          media_type = @media_type_for_accept[env['HTTP_ACCEPT']] if vendor && !strict
+          return super unless media_type
+
+          record_media_type(env, media_type)
+          app.call(env).to_a
+        end
 
         def before
-          strict_header_checks if strict?
-
-          if media_type || env[Grape::Env::GRAPE_ALLOWED_METHODS]
-            media_type_header_handler
-          elsif headers_contain_wrong_vendor?
-            fail_with_invalid_accept_header!('API vendor not found.')
-          elsif headers_contain_wrong_version?
-            fail_with_invalid_version_header!('API version not found.')
-          end
+          match_best_quality_media_type! { |media_type| record_media_type(env, media_type) }
         end
 
         private
 
-        def strict_header_checks
-          strict_accept_header_presence_check
-          strict_version_vendor_accept_header_presence_check
+        def record_media_type(env, media_type)
+          env.update(
+            Grape::Env::API_TYPE => media_type.type,
+            Grape::Env::API_SUBTYPE => media_type.subtype,
+            Grape::Env::API_VENDOR => media_type.vendor,
+            Grape::Env::API_VERSION => media_type.version,
+            Grape::Env::API_FORMAT => media_type.format
+          )
         end
 
-        def strict_accept_header_presence_check
-          return unless header.qvalues.empty?
+        def match_best_quality_media_type!
+          return unless vendor
 
-          fail_with_invalid_accept_header!('Accept header must be set.')
+          strict_header_checks!
+          # The table's keys are valid Strings, which scrubbing leaves alone, so
+          # it is read with the header as it came.
+          media_type = @media_type_for_accept[env['HTTP_ACCEPT']] || Grape::Util::MediaType.best_quality(accept_header, available_media_types, vendor:)
+          return yield media_type if media_type
+
+          fail!
         end
 
-        def strict_version_vendor_accept_header_presence_check
-          return unless versions.present?
-          return if an_accept_header_with_version_and_vendor_is_present?
-
-          fail_with_invalid_accept_header!('API vendor or version not found.')
+        # Scrubbed of any bytes its encoding does not allow: +blank?+,
+        # +downcase+ and Rack's q-value parsing all raise on one.
+        def accept_header
+          @accept_header ||= try_scrub(env['HTTP_ACCEPT'])
         end
 
-        def an_accept_header_with_version_and_vendor_is_present?
-          header.qvalues.keys.any? do |h|
-            VENDOR_VERSION_HEADER_REGEX.match?(h.sub('application/', ''))
-          end
+        def strict_header_checks!
+          return unless strict
+
+          accept_header_check!
+          version_and_vendor_check!
         end
 
-        def header
-          @header ||= rack_accept_header
+        def accept_header_check!
+          return if accept_header.present?
+
+          invalid_accept_header!('Accept header must be set.')
         end
 
-        def media_type
-          @media_type ||= header.best_of(available_media_types)
+        def version_and_vendor_check!
+          return if versions.nil? || versions.empty? || version_and_vendor?
+
+          invalid_accept_header!('API vendor or version not found.')
         end
 
-        def media_type_header_handler
-          type, subtype = Rack::Accept::Header.parse_media_type(media_type)
-          env[Grape::Env::API_TYPE] = type
-          env[Grape::Env::API_SUBTYPE] = subtype
-
-          return unless VENDOR_VERSION_HEADER_REGEX =~ subtype
-
-          env[Grape::Env::API_VENDOR] = Regexp.last_match[1]
-          env[Grape::Env::API_VERSION] = Regexp.last_match[2]
-          # weird that Grape::Middleware::Formatter also does this
-          env[Grape::Env::API_FORMAT] = Regexp.last_match[3]
+        def q_values_mime_types
+          @q_values_mime_types ||= Rack::Utils.q_values(accept_header).map(&:first)
         end
 
-        def fail_with_invalid_accept_header!(message)
-          raise Grape::Exceptions::InvalidAcceptHeader
-            .new(message, error_headers)
+        def version_and_vendor?
+          q_values_mime_types.any? { |mime_type| Grape::Util::MediaType.match?(mime_type) }
         end
 
-        def fail_with_invalid_version_header!(message)
-          raise Grape::Exceptions::InvalidVersionHeader
-            .new(message, error_headers)
+        def invalid_accept_header!(message)
+          raise Grape::Exceptions::InvalidAcceptHeader.new(message, error_headers)
         end
 
-        def available_media_types
-          available_media_types = []
-
-          content_types.each_key do |extension|
-            versions.reverse_each do |version|
-              available_media_types += [
-                "application/vnd.#{vendor}-#{version}+#{extension}",
-                "application/vnd.#{vendor}-#{version}"
-              ]
-            end
-            available_media_types << "application/vnd.#{vendor}+#{extension}"
-          end
-
-          available_media_types << "application/vnd.#{vendor}"
-
-          content_types.each_value do |media_type|
-            available_media_types << media_type
-          end
-
-          available_media_types.flatten
+        def invalid_version_header!(message)
+          raise Grape::Exceptions::InvalidVersionHeader.new(message, error_headers)
         end
 
-        def headers_contain_wrong_vendor?
-          header.values.all? do |header_value|
-            vendor?(header_value) && request_vendor(header_value) != vendor
-          end
+        def fail!
+          return if env[Grape::Env::GRAPE_ALLOWED_METHODS]
+
+          media_types = q_values_mime_types.map { |mime_type| Grape::Util::MediaType.parse(mime_type, vendor:) }
+          vendor_not_found!(media_types) || version_not_found!(media_types)
         end
 
-        def headers_contain_wrong_version?
-          header.values.all? do |header_value|
-            version?(header_value) && !versions.include?(request_version(header_value))
-          end
+        def vendor_not_found!(media_types)
+          return unless media_types.all? { |media_type| media_type&.vendor && media_type.vendor != vendor }
+
+          invalid_accept_header!('API vendor not found.')
         end
 
-        def rack_accept_header
-          Rack::Accept::MediaType.new env[Grape::Http::Headers::HTTP_ACCEPT]
-        rescue RuntimeError => e
-          fail_with_invalid_accept_header!(e.message)
-        end
+        def version_not_found!(media_types)
+          return unless media_types.all? { |media_type| media_type&.version && versions&.none? { |version| version.casecmp?(media_type.version) } }
 
-        def versions
-          options[:versions] || []
-        end
-
-        def vendor
-          version_options && version_options[:vendor]
-        end
-
-        def strict?
-          version_options && version_options[:strict]
-        end
-
-        def version_options
-          options[:version_options]
-        end
-
-        # By default those errors contain an `X-Cascade` header set to `pass`,
-        # which allows nesting and stacking of routes
-        # (see Grape::Router for more
-        # information). To prevent # this behavior, and not add the `X-Cascade`
-        # header, one can set the `:cascade` option to `false`.
-        def cascade?
-          if version_options&.key?(:cascade)
-            version_options[:cascade]
-          else
-            true
-          end
-        end
-
-        def error_headers
-          cascade? ? { Grape::Http::Headers::X_CASCADE => 'pass' } : {}
-        end
-
-        # @param [String] media_type a content type
-        # @return [Boolean] whether the content type sets a vendor
-        def vendor?(media_type)
-          _, subtype = Rack::Accept::Header.parse_media_type(media_type)
-          subtype.present? && subtype[HAS_VENDOR_REGEX]
-        end
-
-        def request_vendor(media_type)
-          _, subtype = Rack::Accept::Header.parse_media_type(media_type)
-          subtype.match(VENDOR_VERSION_HEADER_REGEX)[1]
-        end
-
-        def request_version(media_type)
-          _, subtype = Rack::Accept::Header.parse_media_type(media_type)
-          subtype.match(VENDOR_VERSION_HEADER_REGEX)[2]
-        end
-
-        # @param [String] media_type a content type
-        # @return [Boolean] whether the content type sets an API version
-        def version?(media_type)
-          _, subtype = Rack::Accept::Header.parse_media_type(media_type)
-          subtype.present? && subtype[HAS_VERSION_REGEX]
+          invalid_version_header!('API version not found.')
         end
       end
     end

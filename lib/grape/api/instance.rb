@@ -1,37 +1,43 @@
 # frozen_string_literal: true
 
-require 'grape/router'
-
 module Grape
   class API
     # The API Instance class, is the engine behind Grape::API. Each class that inherits
     # from this will represent a different API instance
     class Instance
-      include Grape::DSL::API
+      # Marks this and every mounted instance as a mountable Grape app (see Grape::Mountable).
+      extend Grape::Mountable
+      extend Grape::DSL::Settings
+      extend Grape::DSL::Desc
+      extend Grape::DSL::Validations
+      extend Grape::DSL::Callbacks
+      extend Grape::DSL::Logger
+      extend Grape::DSL::Middleware
+      extend Grape::DSL::RequestResponse
+      extend Grape::DSL::Routing
+      extend Grape::DSL::Mounting
+      extend Grape::DSL::Versioning
+      extend Grape::DSL::Helpers
+      extend Grape::Middleware::Auth::DSL
+
+      Boolean = Grape::API::Boolean
 
       class << self
-        attr_reader :instance, :base
         attr_accessor :configuration
 
-        def given(conditional_option, &block)
-          evaluate_as_instance_with_configuration(block, lazy: true) if conditional_option && block
+        def to_s
+          @base&.to_s || super
         end
 
-        def mounted(&block)
-          evaluate_as_instance_with_configuration(block, lazy: true)
-        end
+        attr_reader :base
 
         def base=(grape_api)
           @base = grape_api
           grape_api.instances << self
         end
 
-        def to_s
-          base&.to_s || super
-        end
-
         def base_instance?
-          self == base.base_instance
+          self == @base.base_instance
         end
 
         # A class-level lock to ensure the API is not compiled by multiple
@@ -45,10 +51,35 @@ module Grape
           reset_validations!
         end
 
-        # Parses the API's definition and compiles it into an instance of
-        # Grape::API.
-        def compile
-          @instance ||= new
+        # This is the interface point between Rack and Grape; it accepts a request
+        # from Rack and ultimately returns an array of three values: the status,
+        # the headers, and the body. See [the rack specification]
+        # (http://www.rubydoc.info/github/rack/rack/master/file/SPEC) for more.
+        def call(env)
+          compile!.call(env)
+        end
+
+        # Returns the compiled instance, so callers serve the one they
+        # compiled rather than re-reading @instance — +change!+ can nil it
+        # between the two reads (see #call / #recognize_path).
+        def compile!
+          @instance || LOCK.synchronize { @instance ||= new }
+        end
+
+        # Compiles the API and loads I18n's translations, which its first
+        # request and its first error response would otherwise do. Meant for
+        # boot, once the application's locale files are on +I18n.load_path+.
+        #
+        # @example
+        #   Twitter::API.eager_load!
+        def eager_load!
+          load_i18n_translations
+          compile!
+        end
+
+        # see Grape::Router#recognize_path
+        def recognize_path(path)
+          compile!.router.recognize_path(path)
         end
 
         # Wipe the compiled API so we can recompile after changes were made.
@@ -56,80 +87,7 @@ module Grape
           @instance = nil
         end
 
-        # This is the interface point between Rack and Grape; it accepts a request
-        # from Rack and ultimately returns an array of three values: the status,
-        # the headers, and the body. See [the rack specification]
-        # (http://www.rubydoc.info/github/rack/rack/master/file/SPEC) for more.
-        def call(env)
-          compile!
-          call!(env)
-        end
-
-        # A non-synchronized version of ::call.
-        def call!(env)
-          instance.call(env)
-        end
-
-        # (see #cascade?)
-        def cascade(value = nil)
-          if value.nil?
-            inheritable_setting.namespace_inheritable.key?(:cascade) ? !namespace_inheritable(:cascade).nil? : true
-          else
-            namespace_inheritable(:cascade, value)
-          end
-        end
-
-        def compile!
-          return if instance
-
-          LOCK.synchronize { compile unless instance }
-        end
-
-        # see Grape::Router#recognize_path
-        def recognize_path(path)
-          compile!
-          instance.router.recognize_path(path)
-        end
-
         protected
-
-        def prepare_routes
-          endpoints.map(&:routes).flatten
-        end
-
-        # Execute first the provided block, then each of the
-        # block passed in. Allows for simple 'before' setups
-        # of settings stack pushes.
-        def nest(*blocks, &block)
-          blocks.reject!(&:nil?)
-          if blocks.any?
-            evaluate_as_instance_with_configuration(block) if block
-            blocks.each { |b| evaluate_as_instance_with_configuration(b) }
-            reset_validations!
-          else
-            instance_eval(&block)
-          end
-        end
-
-        def evaluate_as_instance_with_configuration(block, lazy: false)
-          lazy_block = Grape::Util::LazyBlock.new do |configuration|
-            value_for_configuration = configuration
-            self.configuration = value_for_configuration.evaluate if value_for_configuration.respond_to?(:lazy?) && value_for_configuration.lazy?
-            response = instance_eval(&block)
-            self.configuration = value_for_configuration
-            response
-          end
-          if base && base_instance? && lazy
-            lazy_block
-          else
-            lazy_block.evaluate_from(configuration)
-          end
-        end
-
-        def inherited(subclass)
-          subclass.reset!
-          subclass.logger = logger.clone
-        end
 
         def inherit_settings(other_settings)
           top_level_setting.inherit_from other_settings.point_in_time_copy
@@ -137,11 +95,30 @@ module Grape
           # Propagate any inherited params down to our endpoints, and reset any
           # compiled routes.
           endpoints.each do |e|
-            e.inherit_settings(top_level_setting.namespace_stackable)
+            e.inherit_settings(top_level_setting)
             e.reset_routes!
           end
 
           reset_routes!
+        end
+
+        private
+
+        def inherited(subclass)
+          super
+          subclass.reset!
+        end
+
+        # A Simple backend is loaded the way its first lookup loads it: its
+        # +eager_load!+ would also make every later +I18n.reload!+ load at
+        # once, and raises on a LazyLoadable backend set to +lazy_load+. Any
+        # other backend is eager loaded if it can be, or left to its first
+        # lookup.
+        def load_i18n_translations
+          backend = I18n.backend
+          return backend.translations(do_init: true) if backend.is_a?(I18n::Backend::Simple::Implementation)
+
+          backend.eager_load! if backend.respond_to?(:eager_load!)
         end
       end
 
@@ -158,13 +135,33 @@ module Grape
 
         @router.compile!
         @router.freeze
+        # One Rack::Head around the router strips the body of every HEAD
+        # response the API gives, including the router's own 404 and a mounted
+        # Rack app's, which go through no endpoint's stack. Rack::Lint goes
+        # outside it, where it sees the response that is served.
+        @app = Rack::Head.new(@router)
+        @app = Rack::Lint.new(@app) if lint?
+        @cascade = self.class.cascade
       end
 
       # Handle a request. See Rack documentation for what `env` is.
       def call(env)
-        result = @router.call(env)
-        result[1].delete(Grape::Http::Headers::X_CASCADE) unless cascade?
-        result
+        response = @app.call(env)
+        return response if @cascade
+
+        headers = response[1]
+        # A Rack::Headers folds case the way the copy below does, so it can
+        # answer for it; any other Hash cannot, and still goes through the copy.
+        return response if headers.is_a?(Rack::Headers) && !headers.key?('x-cascade')
+
+        # +merge!+, not +merge+: the latter is a `dup` plus a `merge!`, so the
+        # Header built on this line would be allocated only to be discarded.
+        # The copy stays because +headers+ can come from a mounted Rack app,
+        # which is free to hand back a frozen or shared Hash that the delete
+        # below must not reach into.
+        headers = Rack::Headers.new.merge!(headers)
+        headers.delete('x-cascade')
+        [response[0], headers, response[2]]
       end
 
       # Some requests may return a HTTP 404 error if grape cannot find a matching
@@ -173,13 +170,15 @@ module Grape
       # looking for a matching route on other resources.
       #
       # In some applications (e.g. mounting grape on rails), one might need to trap
-      # errors from reaching upstream. This is effectivelly done by unsetting
+      # errors from reaching upstream. This is effectively done by unsetting
       # X-Cascade. Default :cascade is true.
+      #
+      # Resolved in the constructor rather than per request: answering it walks
+      # the whole scope chain twice, and it reads the same settings the routes
+      # were compiled and frozen from -- changing those has to go through
+      # +change!+, which discards this instance.
       def cascade?
-        return self.class.namespace_inheritable(:cascade) if self.class.inheritable_setting.namespace_inheritable.key?(:cascade)
-        return self.class.namespace_inheritable(:version_options)[:cascade] if self.class.namespace_inheritable(:version_options)&.key?(:cascade)
-
-        true
+        @cascade
       end
 
       reset!
@@ -191,88 +190,56 @@ module Grape
       # will return an HTTP 405 response for any HTTP method that the resource
       # cannot handle.
       def add_head_not_allowed_methods_and_options_methods
-        versioned_route_configs = collect_route_config_per_pattern
         # The paths we collected are prepared (cf. Path#prepare), so they
         # contain already versioning information when using path versioning.
-        # Disable versioning so adding a route won't prepend versioning
-        # informations again.
-        without_root_prefix do
-          without_versioning do
-            versioned_route_configs.each do |config|
-              next if config[:options][:matching_wildchar]
+        all_routes = self.class.endpoints.flat_map(&:routes)
 
-              allowed_methods = config[:methods].dup
+        collect_route_config_per_pattern(all_routes)
+      end
 
-              allowed_methods |= [Grape::Http::Headers::HEAD] if !self.class.namespace_inheritable(:do_not_route_head) && allowed_methods.include?(Grape::Http::Headers::GET)
+      def collect_route_config_per_pattern(all_routes)
+        setting = self.class.inheritable_setting
+        routes_by_regexp = all_routes.group_by(&:pattern_regexp)
 
-              allow_header = (self.class.namespace_inheritable(:do_not_route_options) ? allowed_methods : [Grape::Http::Headers::OPTIONS] | allowed_methods)
+        # Build the configuration from the collection of methods supported.
+        routes_by_regexp.each_value do |routes|
+          next if routes.any? { |route| route.request_method == '*' }
 
-              config[:endpoint].options[:options_route_enabled] = true unless self.class.namespace_inheritable(:do_not_route_options) || allowed_methods.include?(Grape::Http::Headers::OPTIONS)
-
-              attributes = config.merge(allowed_methods: allowed_methods, allow_header: allow_header)
-              generate_not_allowed_method(config[:pattern], **attributes)
-            end
-          end
+          associate_allowed_methods_route(routes, setting)
         end
       end
 
-      def collect_route_config_per_pattern
-        all_routes       = self.class.endpoints.map(&:routes).flatten
-        routes_by_regexp = all_routes.group_by { |route| route.pattern.to_regexp }
+      # The route answering 405 and auto-OPTIONS for the path +routes+
+      # share. Most of the configuration is taken from the last endpoint.
+      def associate_allowed_methods_route(routes, setting)
+        last_route = routes.last
+        allowed_methods = allowed_methods_for(routes, setting)
 
-        # Build the configuration based on the first endpoint and the collection of methods supported.
-        routes_by_regexp.values.map do |routes|
-          last_route        = routes.last # Most of the configuration is taken from the last endpoint
-          matching_wildchar = routes.any? { |route| route.request_method == '*' }
-          {
-            options: { matching_wildchar: matching_wildchar },
-            pattern: last_route.pattern,
-            requirements: last_route.requirements,
-            path: last_route.origin,
-            endpoint: last_route.app,
-            methods: matching_wildchar ? Grape::Http::Headers::SUPPORTED_METHODS : routes.map(&:request_method)
-          }
-        end
+        allow_header = setting.do_not_route_options? ? allowed_methods : [Rack::OPTIONS] | allowed_methods
+        last_route.app.options_route_enabled = true unless setting.do_not_route_options? || allowed_methods.include?(Rack::OPTIONS)
+
+        route = Grape::Router::AllowedMethodsRoute.new(last_route.pattern, endpoint: last_route.app, allow_header:)
+        @router.associate_routes(route)
       end
 
-      # Generate a route that returns an HTTP 405 response for a user defined
-      # path on methods not specified
-      def generate_not_allowed_method(pattern, allowed_methods: [], **attributes)
-        supported_methods =
-          if self.class.namespace_inheritable(:do_not_route_options)
-            Grape::Http::Headers::SUPPORTED_METHODS
-          else
-            Grape::Http::Headers::SUPPORTED_METHODS_WITHOUT_OPTIONS
-          end
-        not_allowed_methods = supported_methods - allowed_methods
-        @router.associate_routes(pattern, not_allowed_methods: not_allowed_methods, **attributes)
+      # The methods +routes+ answer, with HEAD alongside GET unless the API
+      # declared +do_not_route_head!+.
+      def allowed_methods_for(routes, setting)
+        allowed_methods = routes.map(&:request_method)
+        return allowed_methods if setting.do_not_route_head? || !allowed_methods.include?(Rack::GET)
+
+        allowed_methods | [Rack::HEAD]
       end
 
-      # Allows definition of endpoints that ignore the versioning configuration
-      # used by the rest of your API.
-      def without_versioning(&_block)
-        old_version = self.class.namespace_inheritable(:version)
-        old_version_options = self.class.namespace_inheritable(:version_options)
-
-        self.class.namespace_inheritable_to_nil(:version)
-        self.class.namespace_inheritable_to_nil(:version_options)
-
-        yield
-
-        self.class.namespace_inheritable(:version, old_version)
-        self.class.namespace_inheritable(:version_options, old_version_options)
-      end
-
-      # Allows definition of endpoints that ignore the root prefix used by the
-      # rest of your API.
-      def without_root_prefix(&_block)
-        old_prefix = self.class.namespace_inheritable(:root_prefix)
-
-        self.class.namespace_inheritable_to_nil(:root_prefix)
-
-        yield
-
-        self.class.namespace_inheritable(:root_prefix, old_prefix)
+      # +lint!+ declared at the top of this API, or Grape.config.lint: one
+      # Rack::Lint around the router then checks every response the API gives
+      # -- an endpoint's, the 404 the router answers itself, a mounted Rack
+      # app's -- exactly once. Linting inside each endpoint's stack instead
+      # missed the last two, and wrapping a second Rack::Lint around those
+      # breaks a middleware that calls +to_ary+ on the body, as Rack::ETag does.
+      # Called once, from the constructor.
+      def lint?
+        self.class.inheritable_setting.lint? || Grape.config.lint
       end
     end
   end

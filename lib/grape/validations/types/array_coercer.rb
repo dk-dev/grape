@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'dry_type_coercer'
-
 module Grape
   module Validations
     module Types
@@ -9,18 +7,17 @@ module Grape
       # an array of arrays of integers.
       #
       # It could've been possible to use an +of+
-      # method (https://dry-rb.org/gems/dry-types/1.2/array-with-member/)
+      # method (https://dry-rb.org/gems/dry-types/main/array-with-member/)
       # provided by dry-types. Unfortunately, it doesn't work for Grape because of
       # behavior of Virtus which was used earlier, a `Grape::Validations::Types::PrimitiveCoercer`
       # maintains Virtus behavior in coercing.
       class ArrayCoercer < DryTypeCoercer
-        register_collection Array
-
-        def initialize(type, strict = false)
+        def initialize(type, strict: false)
           super
-
-          @coercer = scope::Array
-          @subtype = type.first
+          @coercer = strict ? DryTypes::Strict::Array : DryTypes::Params::Array
+          # Built eagerly: instances are shared across requests (and cached in
+          # Types::CoercerCache), so no lazy state may be created at call time.
+          @elem_coercer = DryTypeCoercer.coercer_instance_for(type.first, strict:)
         end
 
         def call(_val)
@@ -32,7 +29,7 @@ module Grape
 
         protected
 
-        attr_reader :subtype
+        attr_reader :elem_coercer
 
         def coerce_elements(collection)
           return if collection.nil?
@@ -54,10 +51,6 @@ module Grape
         # Virtus doesn't allow nil in arrays.
         def reject?(val)
           val.nil?
-        end
-
-        def elem_coercer
-          @elem_coercer ||= DryTypeCoercer.coercer_instance_for(subtype, strict)
         end
       end
     end

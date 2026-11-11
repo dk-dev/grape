@@ -10,7 +10,7 @@ module Grape
       # there are any problems parsing the string.
       #
       # Alternately an optional +method+ may be supplied (see the
-      # +coerce_with+ option of {Grape::Dsl::Parameters#requires}).
+      # +coerce_with+ option of {Grape::DSL::Parameters#requires}).
       # This may be any class or object implementing +parse+ or +call+,
       # with the same contract as described above.
       #
@@ -33,6 +33,12 @@ module Grape
       # contract as +coerced?+, and must be supplied with a coercion
       # +method+.
       class CustomTypeCoercer
+        extend Grape::Util::FreezeOnNew
+
+        TYPE_CHECK_METHODS = %i[coerced? parsed?].freeze
+        COLLECTION_TYPES = [Array, Set].freeze
+        private_constant :TYPE_CHECK_METHODS, :COLLECTION_TYPES
+
         # A new coercer for the given type specification
         # and coercion method.
         #
@@ -41,15 +47,13 @@ module Grape
         # @param method [#parse,#call]
         #   optional coercion method. See class docs.
         def initialize(type, method = nil)
-          coercion_method = infer_coercion_method type, method
-          @method = enforce_symbolized_keys type, coercion_method
+          @method = build_coercion_method(type, method)
           @type_check = infer_type_check(type)
         end
 
         # Coerces the given value.
         #
-        # @param value [String] value to be coerced, in grape
-        #   this should always be a string.
+        # @param val [Object] value to be coerced
         # @return [Object] the coerced result
         def call(val)
           coerced_val = @method.call(val)
@@ -66,111 +70,54 @@ module Grape
 
         private
 
-        # Determine the coercion method we're expected to use
-        # based on the parameters given.
-        #
-        # @param type see #new
-        # @param method see #new
-        # @return [#call] coercion method
-        def infer_coercion_method(type, method)
-          if method
-            if method.respond_to? :parse
-              method.method :parse
-            else
-              method
-            end
-          else
-            # Try to use parse() declared on the target type.
-            # This may raise an exception, but we are out of ideas anyway.
-            type.method :parse
-          end
+        def build_coercion_method(type, method)
+          coercion_method = infer_coercion_method(type, method)
+          return hash_symbolizer(coercion_method) if type == Hash
+          return collection_symbolizer(coercion_method) if COLLECTION_TYPES.include?(type)
+
+          coercion_method
         end
 
-        # Determine how the type validity of a coerced
-        # value should be decided.
-        #
-        # @param type see #new
-        # @return [#call] a procedure which accepts a single parameter
-        #   and returns +true+ if the passed object is of the correct type.
+        def infer_coercion_method(type, method)
+          return type.method(:parse) unless method
+          return method unless method.respond_to?(:parse)
+
+          method.method(:parse)
+        end
+
+        def hash_symbolizer(method)
+          ->(val) { method.call(val).deep_symbolize_keys }
+        end
+
+        # +dup+ before +map!+: the collection is whatever the user's coercion
+        # method returned — possibly frozen, possibly the input itself — so we
+        # must not mutate it in place. +dup+ also preserves the class, keeping a
+        # +Set+ a +Set+ (unlike +map+, which would return an +Array+).
+        def collection_symbolizer(method)
+          ->(val) { method.call(val).dup.map! { |item| symbolize_if_hash(item) } }
+        end
+
+        def symbolize_if_hash(item)
+          item.is_a?(Hash) ? item.deep_symbolize_keys : item
+        end
+
         def infer_type_check(type)
-          # First check for special class methods
-          if type.respond_to? :coerced?
-            type.method :coerced?
-          elsif type.respond_to? :parsed?
-            type.method :parsed?
-          elsif type.respond_to? :call
-            # Arbitrary proc passed for type validation.
-            # Note that this will fail unless a method is also
-            # passed, or if the type also implements a parse() method.
-            type
-          elsif type.is_a?(Enumerable)
-            lambda do |value|
-              value.is_a?(Enumerable) && value.all? do |val|
-                recursive_type_check(type.first, val)
-              end
-            end
-          else
-            # By default, do a simple type check
-            ->(value) { value.is_a? type }
-          end
+          method_name = TYPE_CHECK_METHODS.detect { |m| type.respond_to?(m) }
+          return type.method(method_name) if method_name
+          return type if type.respond_to?(:call)
+          return enumerable_type_check(type) if type.is_a?(Enumerable)
+
+          ->(value) { value.is_a? type }
+        end
+
+        def enumerable_type_check(type)
+          ->(value) { value.is_a?(Enumerable) && value.all? { |val| recursive_type_check(type.first, val) } }
         end
 
         def recursive_type_check(type, value)
-          if type.is_a?(Enumerable) && value.is_a?(Enumerable)
-            value.all? { |val| recursive_type_check(type.first, val) }
-          else
-            !type.is_a?(Enumerable) && value.is_a?(type)
-          end
-        end
+          return value.all? { |val| recursive_type_check(type.first, val) } if type.is_a?(Enumerable) && value.is_a?(Enumerable)
 
-        # Enforce symbolized keys for complex types
-        # by wrapping the coercion method such that
-        # any Hash objects in the immediate heirarchy
-        # have their keys recursively symbolized.
-        # This helps common libs such as JSON to work easily.
-        #
-        # @param type see #new
-        # @param method see #infer_coercion_method
-        # @return [#call] +method+ wrapped in an additional
-        #   key-conversion step, or just returns +method+
-        #   itself if no conversion is deemed to be
-        #   necessary.
-        def enforce_symbolized_keys(type, method)
-          # Collections have all values processed individually
-          if [Array, Set].include?(type)
-            lambda do |val|
-              method.call(val).tap do |new_val|
-                new_val.map do |item|
-                  item.is_a?(Hash) ? symbolize_keys(item) : item
-                end
-              end
-            end
-
-          # Hash objects are processed directly
-          elsif type == Hash
-            lambda do |val|
-              symbolize_keys method.call(val)
-            end
-
-          # Simple types are not processed.
-          # This includes Array<primitive> types.
-          else
-            method
-          end
-        end
-
-        def symbolize_keys!(hash)
-          hash.each_key do |key|
-            hash[key.to_sym] = hash.delete(key) if key.respond_to?(:to_sym)
-          end
-          hash
-        end
-
-        def symbolize_keys(hash)
-          hash.inject({}) do |new_hash, (key, value)|
-            new_key = key.respond_to?(:to_sym) ? key.to_sym : key
-            new_hash.merge!(new_key => value)
-          end
+          !type.is_a?(Enumerable) && value.is_a?(type)
         end
       end
     end

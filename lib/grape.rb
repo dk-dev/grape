@@ -1,249 +1,106 @@
 # frozen_string_literal: true
 
 require 'logger'
-require 'rack'
-require 'rack/builder'
-require 'rack/accept'
-require 'rack/auth/basic'
-require 'rack/auth/digest/md5'
-require 'set'
-require 'active_support/version'
-require 'active_support/core_ext/hash/indifferent_access'
-require 'active_support/core_ext/object/blank'
-require 'active_support/core_ext/array/extract_options'
+require 'monitor'
+require 'active_support'
+require 'active_support/isolated_execution_state'
+require 'active_support/core_ext/array/conversions' # to_xml
 require 'active_support/core_ext/array/wrap'
-require 'active_support/core_ext/array/conversions'
+require 'active_support/core_ext/hash/conversions' # to_xml
 require 'active_support/core_ext/hash/deep_merge'
-require 'active_support/core_ext/hash/reverse_merge'
-require 'active_support/core_ext/hash/except'
-require 'active_support/core_ext/hash/slice'
-require 'active_support/core_ext/hash/conversions'
-require 'active_support/dependencies/autoload'
+require 'active_support/core_ext/hash/deep_transform_values'
+require 'active_support/core_ext/hash/indifferent_access' # nested_under_indifferent_access, required by HashWithIndifferentAccess.new
+require 'active_support/hash_with_indifferent_access'
+require 'active_support/core_ext/module/delegation' # delegate_missing_to
+require 'active_support/core_ext/object/blank'
+require 'active_support/core_ext/object/duplicable'
+require 'active_support/core_ext/string/inflections' # demodulize, underscore
+require 'active_support/deprecation'
+require 'active_support/ordered_options'
 require 'active_support/notifications'
-require 'i18n'
+
+require 'English'
+require 'bigdecimal'
+require 'date'
+require 'dry-types'
+require 'dry-configurable'
+require 'forwardable'
+require 'json'
+require 'mustermann'
+require 'mustermann/ast/pattern'
+require 'rack'
+require 'rack/auth/basic'
+require 'rack/builder'
+require 'rack/head'
+require 'rack/headers'
+require 'singleton'
+require 'zeitwerk'
+
+loader = Zeitwerk::Loader.for_gem
+loader.inflector.inflect(
+  'api' => 'API',
+  'dsl' => 'DSL'
+)
+railtie = "#{__dir__}/grape/railtie.rb"
+# Grape::Testing is a test-environment helper -- it extends Grape::Endpoint with
+# `before_each` and prepends a hook to Grape::Endpoint#run. It is documented as
+# opt-in (`require 'grape/testing'`), which eager loading quietly contradicted
+# by installing it in every process.
+testing = "#{__dir__}/grape/testing.rb"
+loader.do_not_eager_load(railtie, testing)
+loader.setup
 
 I18n.load_path << File.expand_path('grape/locale/en.yml', __dir__)
 
 module Grape
-  extend ::ActiveSupport::Autoload
+  extend Dry::Configurable
 
-  eager_autoload do
-    autoload :API
-    autoload :Endpoint
+  setting :param_builder, default: :hash_with_indifferent_access
+  setting :lint, default: false
+  setting :warn_on_helper_overrides, default: false
+  # Let an error response that cannot be rendered propagate out of the
+  # middleware stack instead of being answered with a failsafe 500.
+  setting :raise_rendering_errors, default: false
+  # Let an exception raised inside a `rescue_from` block propagate out of the
+  # middleware stack instead of being redispatched.
+  setting :raise_rescue_handler_errors, default: false
+  # Hand an endpoint the params a request carries that it did not declare.
+  # When false, such a request is answered 400. Grape 5.0 makes false the
+  # default.
+  setting :allow_undeclared_params, default: true
 
-    autoload :Namespace
+  # The HTTP QUERY method (RFC 10008): a safe, idempotent request whose content
+  # carries the query. Rack has no constant for it yet, hence the literal.
+  QUERY = 'QUERY'
 
-    autoload :Path
-    autoload :Cookies
-    autoload :Validations
-    autoload :ErrorFormatter
-    autoload :Formatter
-    autoload :Parser
-    autoload :Request
-    autoload :Env, 'grape/util/env'
-    autoload :Json, 'grape/util/json'
-    autoload :Xml, 'grape/util/xml'
-  end
+  HTTP_SUPPORTED_METHODS = [
+    Rack::GET,
+    QUERY,
+    Rack::POST,
+    Rack::PUT,
+    Rack::PATCH,
+    Rack::DELETE,
+    Rack::HEAD,
+    Rack::OPTIONS
+  ].freeze
 
-  module Http
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Headers
-    end
-  end
+  # Rack errors that should be rescued and wrapped as Grape::Exceptions::RequestError.
+  # Rack::BadRequest is a marker module every Rack bad-request exception includes.
+  RACK_ERRORS = [EOFError, Rack::BadRequest].freeze
 
-  module Exceptions
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Base
-      autoload :Validation
-      autoload :ValidationArrayErrors
-      autoload :ValidationErrors
-      autoload :MissingVendorOption
-      autoload :MissingMimeType
-      autoload :MissingOption
-      autoload :InvalidFormatter
-      autoload :InvalidVersionerOption
-      autoload :UnknownValidator
-      autoload :UnknownOptions
-      autoload :UnknownParameter
-      autoload :InvalidWithOptionForRepresent
-      autoload :IncompatibleOptionValues
-      autoload :MissingGroupTypeError,          'grape/exceptions/missing_group_type'
-      autoload :UnsupportedGroupTypeError,      'grape/exceptions/unsupported_group_type'
-      autoload :InvalidMessageBody
-      autoload :InvalidAcceptHeader
-      autoload :InvalidVersionHeader
-      autoload :MethodNotAllowed
-      autoload :InvalidResponse
-      autoload :EmptyMessageBody
-    end
-  end
-
-  module Extensions
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :DeepMergeableHash
-      autoload :DeepSymbolizeHash
-      autoload :Hash
-    end
-    module ActiveSupport
-      extend ::ActiveSupport::Autoload
-      eager_autoload do
-        autoload :HashWithIndifferentAccess
-      end
-    end
-
-    module Hashie
-      extend ::ActiveSupport::Autoload
-      eager_autoload do
-        autoload :Mash
-      end
-    end
-  end
-
-  module Middleware
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Base
-      autoload :Versioner
-      autoload :Formatter
-      autoload :Error
-      autoload :Globals
-      autoload :Stack
-      autoload :Helpers
-    end
-
-    module Auth
-      extend ::ActiveSupport::Autoload
-      eager_autoload do
-        autoload :Base
-        autoload :DSL
-        autoload :StrategyInfo
-        autoload :Strategies
-      end
-    end
-
-    module Versioner
-      extend ::ActiveSupport::Autoload
-      eager_autoload do
-        autoload :Path
-        autoload :Header
-        autoload :Param
-        autoload :AcceptVersionHeader
-      end
-    end
-  end
-
-  module Util
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :InheritableValues
-      autoload :StackableValues
-      autoload :ReverseStackableValues
-      autoload :InheritableSetting
-      autoload :StrictHashConfiguration
-      autoload :Registrable
-    end
-  end
-
-  module ErrorFormatter
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Base
-      autoload :Json
-      autoload :Txt
-      autoload :Xml
-    end
-  end
-
-  module Formatter
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Json
-      autoload :SerializableHash
-      autoload :Txt
-      autoload :Xml
-    end
-  end
-
-  module Parser
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Json
-      autoload :Xml
-    end
-  end
-
-  module DSL
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :API
-      autoload :Callbacks
-      autoload :Settings
-      autoload :Configuration
-      autoload :InsideRoute
-      autoload :Helpers
-      autoload :Middleware
-      autoload :Parameters
-      autoload :RequestResponse
-      autoload :Routing
-      autoload :Validations
-      autoload :Logger
-      autoload :Desc
-    end
-  end
-
-  class API
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Helpers
-    end
-  end
-
-  module Presenters
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :Presenter
-    end
-  end
-
-  module ServeStream
-    extend ::ActiveSupport::Autoload
-    eager_autoload do
-      autoload :FileBody
-      autoload :SendfileResponse
-      autoload :StreamResponse
-    end
+  # The deprecation horizon is the version a deprecation announces as its
+  # removal point, so it is the *next* major rather than the current one, and
+  # it is derived from VERSION rather than written out. Written out, it went
+  # stale: it said '2.0' from 2023 (#2353) through all of 2.x, 3.x and 4.x, so
+  # a method deprecated through this deprecator announced a removal version
+  # that had already shipped, and every custom `behavior` lambda -- how a Rails
+  # app consumes deprecations -- was handed the same wrong number.
+  def self.deprecator
+    @deprecator ||= ActiveSupport::Deprecation.new("#{Gem::Version.new(VERSION).segments.first + 1}.0", 'Grape')
   end
 end
 
-require 'grape/config'
-require 'grape/content_types'
-
-require 'grape/util/lazy_value'
-require 'grape/util/lazy_block'
-require 'grape/util/endpoint_configuration'
-
-require 'grape/validations/validators/base'
-require 'grape/validations/attributes_iterator'
-require 'grape/validations/single_attribute_iterator'
-require 'grape/validations/multiple_attributes_iterator'
-require 'grape/validations/validators/allow_blank'
-require 'grape/validations/validators/as'
-require 'grape/validations/validators/at_least_one_of'
-require 'grape/validations/validators/coerce'
-require 'grape/validations/validators/default'
-require 'grape/validations/validators/exactly_one_of'
-require 'grape/validations/validators/mutual_exclusion'
-require 'grape/validations/validators/presence'
-require 'grape/validations/validators/regexp'
-require 'grape/validations/validators/same_as'
-require 'grape/validations/validators/values'
-require 'grape/validations/validators/except_values'
-require 'grape/validations/params_scope'
-require 'grape/validations/validators/all_or_none'
-require 'grape/validations/types'
-require 'grape/validations/validator_factory'
-
-require 'grape/version'
+# https://api.rubyonrails.org/classes/ActiveSupport/Deprecation.html
+# adding Grape.deprecator to Rails App if any
+require 'grape/railtie' if defined?(Rails::Railtie)
+loader.eager_load
